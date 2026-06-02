@@ -24,6 +24,9 @@ const StudentProfile = {
             <li v-if="userRole === 'admin' || userRole === 'stud'" class="nav-item">
                 <button class="nav-link" :class="{ active: currentTab === 'placements' }" @click="currentTab = 'placements'">Placements (Hired)</button>
             </li>
+            <li v-if="userRole === 'admin'" class="nav-item">
+                <button class="nav-link" :class="{ active: currentTab === 'history' }" @click="currentTab = 'history'">Status Logs (Suspension History)</button>
+            </li>
         </ul>
 
         <div v-if="currentTab === 'details'">
@@ -195,9 +198,9 @@ const StudentProfile = {
                                 </div>
 
                                 <div class="row g-3 pt-2 border-top">
-                                    <div class="col-sm-6" v-if="app.offer_sent_date">
-                                        <small class="text-muted text-uppercase fw-bold d-block">Offer Extended On</small>
-                                        <span class="fw-semibold text-dark">{{ formatDateTime(app.offer_sent_date, false) }}</span>
+                                    <div class="col-sm-6" v-if="app.offer_expiry_date">
+                                        <small class="text-muted text-uppercase fw-bold d-block">Offer Accepting Deadline</small>
+                                        <span class="fw-semibold text-danger"><i class="bi bi-clock-history me-1"></i>{{ formatDateTime(app.offer_expiry_date, false) }}</span>
                                     </div>
                                     <div class="col-sm-6" v-if="app.joining_date">
                                         <small class="text-muted text-uppercase fw-bold d-block">Joining Date</small>
@@ -226,13 +229,51 @@ const StudentProfile = {
                 <p class="text-muted mb-0">Your journey is still active. Keep applying and preparing for your interviews!</p>
             </div>
         </div>
+
+        <!-- Status History (Audit logs for Admins) -->
+        <div v-if="currentTab === 'history' && userRole === 'admin'">
+            <div class="card shadow-sm border-0 rounded-4 overflow-hidden">
+                <div class="card-header bg-dark text-white fw-bold py-3">
+                    <i class="bi bi-shield-lock-fill me-2"></i>Account Status Audit History
+                </div>
+                <div class="card-body">
+                    <div v-if="profile.status_history && profile.status_history.length > 0" class="table-responsive">
+                        <table class="table table-striped table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Action</th>
+                                    <th>Reason / Remarks</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="log in profile.status_history" :key="log.id">
+                                    <td class="text-muted">{{ formatDateTime(log.timestamp) }}</td>
+                                    <td>
+                                        <span class="badge px-3 py-2 rounded-pill" :class="log.status === 'disabled' ? 'bg-danger-subtle text-danger-emphasis' : 'bg-success-subtle text-success-emphasis'">
+                                            {{ log.status === 'disabled' ? 'Suspended / Disabled' : 'Reactivated / Enabled' }}
+                                        </span>
+                                    </td>
+                                    <td class="text-secondary">{{ log.note }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-else class="text-center text-muted p-5">
+                        <i class="bi bi-info-circle fs-1 d-block mb-3 text-secondary"></i>
+                        <h5>No Status History Recorded</h5>
+                        <p class="mb-0">This student has never been suspended or disabled.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     `,
     data() {
         return {
             currentTab: 'details',
             isEditing: false,
-            profile: { name: '', email: '', roll_no: '', phone: '', cgpa: '', department:'', skills: [], linkedin: '', github:'', certificates_link: '', resume:'', profile_pic:'', registration_date: '', about_me: ''},
+            profile: { name: '', email: '', roll_no: '', phone: '', cgpa: '', department:'', skills: [], linkedin: '', github:'', certificates_link: '', resume:'', profile_pic:'', registration_date: '', about_me: '', status_history: []},
             allApplications: [],
             newResumeFile: null,
             newPicture: null,

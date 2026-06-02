@@ -14,6 +14,9 @@ const CompanyProfile = {
             <li class="nav-item" v-if="!isAdminView">
                 <button class="nav-link" :class="{ active: currentTab === 'templates' }" @click="currentTab = 'templates'">Template Library</button>
             </li>
+            <li class="nav-item" v-if="isAdminView || userRole === 'comp'">
+                <button class="nav-link" :class="{ active: currentTab === 'history' }" @click="currentTab = 'history'">Status Logs</button>
+            </li>
         </ul>
 
         <div v-if="currentTab === 'profile'">
@@ -154,9 +157,52 @@ const CompanyProfile = {
                 />
             </div>
         </div>
+
+        <!-- Status History (Audit logs for Admins & Company itself) -->
+        <div v-if="currentTab === 'history' && (isAdminView || userRole === 'comp')">
+            <div class="card shadow-sm border-0 rounded-4 overflow-hidden mt-4">
+                <div class="card-header bg-dark text-white fw-bold py-3">
+                    <i class="bi bi-shield-lock-fill me-2"></i>Company Status Audit History
+                </div>
+                <div class="card-body">
+                    <div v-if="profile.status_history && profile.status_history.length > 0" class="table-responsive">
+                        <table class="table table-striped table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Action</th>
+                                    <th>Reason / Remarks</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="log in profile.status_history" :key="log.id">
+                                    <td class="text-muted">{{ formatDateTime(log.timestamp) }}</td>
+                                    <td>
+                                        <span class="badge px-3 py-2 rounded-pill" :class="log.status === 'disabled' ? 'bg-danger-subtle text-danger-emphasis' : 'bg-success-subtle text-success-emphasis'">
+                                            {{ log.status === 'disabled' ? 'Suspended / Disabled' : 'Reactivated / Enabled' }}
+                                        </span>
+                                    </td>
+                                    <td class="text-secondary">{{ log.note }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-else class="text-center text-muted p-5">
+                        <i class="bi bi-info-circle fs-1 d-block mb-3 text-secondary"></i>
+                        <h5>No Status History Recorded</h5>
+                        <p class="mb-0">This company has never been suspended or disabled.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     `,
     components: { DriveDetailsForm },
+    computed: {
+        userRole() {
+            return localStorage.getItem('role') || 'comp';
+        }
+    },
     data() {
         return {
             isEditing: false,
@@ -175,6 +221,7 @@ const CompanyProfile = {
                 logo_image:'',
                 is_approved: false,
                 id: null,
+                status_history: [],
             },
             newPicture: null,
         };

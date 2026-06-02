@@ -96,6 +96,15 @@ class CompanyProfile(db.Model):
     def email(self):
         return self.user.email if self.user else "Unknown Email"
     def to_dict(self):
+        history_entries = UserStatusHistory.query.filter_by(user_id=self.user_id).order_by(UserStatusHistory.timestamp.desc()).all()
+        history_data = []
+        for h in history_entries:
+            history_data.append({
+                "id": h.id,
+                "status": h.status,
+                "note": h.note or "No note provided.",
+                "timestamp": h.timestamp.isoformat()
+            })
         return {
             'id': self.id,
             'user_id': self.user_id,
@@ -109,7 +118,8 @@ class CompanyProfile(db.Model):
             'secondary_email': self.secondary_email,
             'is_approved': self.is_approved,
             'email': self.email,
-            'registration_date': self.registration_date.isoformat() if self.registration_date else None
+            'registration_date': self.registration_date.isoformat() if self.registration_date else None,
+            'status_history': history_data
         }
 
 class DriveTemplate(db.Model):
@@ -178,6 +188,7 @@ class Application(db.Model):
     available_immediately = db.Column(db.Boolean, default=True, nullable=False)
     available_from = db.Column(db.Date, nullable=True)
     availability_remarks = db.Column(db.Text, nullable=True)
+    previous_status = db.Column(db.String(50), nullable=True)
 
     student=db.relationship('StudentProfile',backref='applications',lazy=True)
     drive=db.relationship('PlacementDrives',backref='application',lazy=True)
@@ -199,6 +210,7 @@ class Interview(db.Model):
     student_facing_remarks = db.Column(db.Text, nullable=True)
     reschedule_count=db.Column(db.Integer, default=0)
     result=db.Column(db.String) #passed/failed
+    previous_status = db.Column(db.String(50), nullable=True)
     application = db.relationship('Application', backref=db.backref('interviews', lazy=True))
 
 class Placement(db.Model):
@@ -224,6 +236,18 @@ class SupportQuery(db.Model):
     response = db.Column(db.Text, nullable=True)
     responded_at = db.Column(db.DateTime, nullable=True)
     user = db.relationship('User', backref='support_queries', lazy=True)
+
+class UserStatusHistory(db.Model):
+    __tablename__ = 'user_status_history'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    status = db.Column(db.String(50), nullable=False) # 'disabled', 'enabled'
+    changed_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # Admin ID who changed it
+    note = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    user = db.relationship('User', foreign_keys=[user_id], backref=db.backref('status_history', lazy='dynamic'))
+    changed_by = db.relationship('User', foreign_keys=[changed_by_id])
 
 class Notification(db.Model):
     id = db.Column(db.Integer, primary_key=True)
