@@ -1,0 +1,56 @@
+# =========================
+# Python / Flask
+# =========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite
+
+env/
+venv/
+.venv/
+ENV/
+
+instance/
+*.log
+
+# =========================
+# Node / Vue
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+node_modules/
+.venv/
+venv/
+__pycache__/
+*Zone.Identifier
+dist/
+build/
+*.egg-info/
+.cache/
+
+# =========================
+# IDE / OS
+# =========================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# =========================
+# Environment files
+# =========================
+.env
+.env.*
+
+# =========================
+# Redis / Celery / Local Temp files
+# =========================
+dump.rdb
+celerybeat-schedule
+celerybeat-schedule.db
+git_commit_messages.md
