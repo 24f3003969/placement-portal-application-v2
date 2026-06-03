@@ -1,0 +1,1723 @@
+openapi: 3.0.0
+info:
+  title: University Placement Portal API
+  version: 1.0.0
+  description: Official REST API documentation for the MAD2 Placement Portal application. This API handles role-based authentication, student profiles, recruiter job postings, and administrative oversight.
+  contact:
+    name: Tanisha Chaudhary
+    email: student@onlinedegree.iitm.ac.in
+
+servers:
+  - url: http://localhost:5000
+    description: Local Development Server
+  - url: http://127.0.0.1:5000
+    description: Alternative Local Server
+
+security:
+  - tokenAuth: []
+
+tags:
+  - name: Authentication & Onboarding
+    description: Signup, custom logins, session verification, identity retrieval, and logout endpoints.
+  - name: Students
+    description: APIs specifically designed for student profile building, resumes, applications, offer response actions, and student dashboards.
+  - name: Companies
+    description: Recruitment endpoints for company profile setup, drive postings, screening applications, scheduling interviews, and release of offers.
+  - name: Administration
+    description: Supervisory endpoints for dashboard aggregates, department registers, company review gates, student account actions, and reports.
+  - name: Common & Public
+    description: Open analytics telemetry, Celery task polling, support queries, and notification systems.
+
+paths:
+  /login_form:
+    post:
+      summary: User Login
+      description: Validates email and credentials, sets session cookie, and returns a session auth token.
+      tags:
+        - Authentication & Onboarding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: admin@iitm.ac.in
+                password:
+                  type: string
+                  format: password
+                  example: admin143
+      responses:
+        '200':
+          description: Login successful. Returns authentication token and user configuration status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Login successful
+                  token:
+                    type: string
+                    example: MjY5ODI3NDEyNzE...
+                  role:
+                    type: string
+                    example: admin
+                  has_profile:
+                    type: boolean
+                    example: true
+                  userName:
+                    type: string
+                    example: admin@iitm.ac.in
+                  needs_department_setup:
+                    type: boolean
+                    example: false
+        '400':
+          description: Missing email or password fields.
+        '401':
+          description: Invalid credentials, inactive account, or pending company approval.
+
+  /signup:
+    post:
+      summary: User Registration
+      description: Registers new student or company credentials, commits them to database, and signs them in immediately.
+      tags:
+        - Authentication & Onboarding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+                - role
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: rec@tcs.com
+                password:
+                  type: string
+                  format: password
+                  example: compPass123
+                role:
+                  type: string
+                  enum: [stud, comp]
+                  description: '`stud` for student, `comp` for company recruiter.'
+      responses:
+        '200':
+          description: User registered successfully. Returns initial session token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: User created and Logged in
+                  role:
+                    type: string
+                    example: comp
+                  token:
+                    type: string
+        '400':
+          description: Missing fields or email already exists.
+        '500':
+          description: Internal signup error.
+
+  /api/logout:
+    post:
+      summary: User Logout
+      description: Explicitly destroys current Flask session state.
+      tags:
+        - Authentication & Onboarding
+      responses:
+        '200':
+          description: Logged out successfully.
+
+  /api/whoami:
+    get:
+      summary: Retrieve Current Session Identity
+      description: Decodes header auth token and returns user credentials, profile creation completion flags, and roles.
+      tags:
+        - Authentication & Onboarding
+      responses:
+        '200':
+          description: Active session status details.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  email:
+                    type: string
+                  role:
+                    type: string
+                  has_profile:
+                    type: boolean
+                  userName:
+                    type: string
+
+  /api/student_details:
+    get:
+      summary: Get Student Profile Detail Fields
+      description: Fetches full parsed profile parameters of the logged-in student.
+      tags:
+        - Students
+      responses:
+        '200':
+          description: Student profile response payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentProfile'
+        '404':
+          description: Student profile does not exist.
+    post:
+      summary: Initialize Student Profile
+      description: Multi-part payload for first-time profile creation. Sets department, roll, cgpa, and saves resume.
+      tags:
+        - Students
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - name
+                - roll_no
+                - phone
+                - cgpa
+                - department
+                - resume
+              properties:
+                name:
+                  type: string
+                roll_no:
+                  type: string
+                phone:
+                  type: string
+                cgpa:
+                  type: number
+                  format: float
+                department:
+                  type: string
+                skills:
+                  type: string
+                  description: Comma separated list of skills.
+                linkedin:
+                  type: string
+                github:
+                  type: string
+                resume:
+                  type: string
+                  format: binary
+                certificates_link:
+                  type: string
+                about_me:
+                  type: string
+      responses:
+        '200':
+          description: Profile initialized successfully.
+        '400':
+          description: Missing mandatory fields.
+
+  /api/student_profile:
+    get:
+      summary: View Student Profile Data (No Cache)
+      description: Fetches fresh profile dataset with strict browser no-store header tags.
+      tags:
+        - Students
+      responses:
+        '200':
+          description: Complete student profile dictionary representation.
+    post:
+      summary: Update Student Profile Parameters
+      description: Updates basic profile contact information via JSON structure. Admin role can also update CGPA and academic fields.
+      tags:
+        - Students
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                phone:
+                  type: string
+                linkedin:
+                  type: string
+                github:
+                  type: string
+                about_me:
+                  type: string
+                certificates_link:
+                  type: string
+                skills:
+                  oneOf:
+                    - type: array
+                      items:
+                        type: string
+                    - type: string
+                user_id:
+                  type: integer
+                  description: (Admin Only) User ID of profile to modify.
+                roll_no:
+                  type: string
+                  description: (Admin Only) Roll number.
+                cgpa:
+                  type: number
+                  format: float
+                  description: (Admin Only) Student CGPA.
+                department:
+                  type: string
+                  description: (Admin Only) Student Department.
+      responses:
+        '200':
+          description: Profile fields saved successfully.
+
+  /api/student_resume:
+    post:
+      summary: Upload Resume File
+      description: Updates a student's resume PDF file using a multipart upload request. Removes the previously saved file if it exists.
+      tags:
+        - Students
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - resume
+              properties:
+                resume:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Resume saved successfully.
+        '400':
+          description: File missing in request.
+
+  /api/profile_pic:
+    post:
+      summary: Upload Profile Photo
+      description: Uploads and replaces student profile avatar image.
+      tags:
+        - Students
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - profile_pic
+              properties:
+                profile_pic:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Picture updated successfully.
+
+  /api/student_applications_api:
+    get:
+      summary: Retrieve Student Applications
+      description: Fetches history of drives the logged-in student has applied to, with nested status records.
+      tags:
+        - Students
+      responses:
+        '200':
+          description: Array list of student application items.
+
+  /api/student_application_api/{application_id}/cancel:
+    put:
+      summary: Cancel Application
+      description: Deletes student drive application and clears caches.
+      tags:
+        - Students
+      parameters:
+        - in: path
+          name: application_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Application cancelled.
+
+  /api/student_application/{application_id}/accept_offer:
+    put:
+      summary: Accept Job Offer
+      description: Formally accepts selected offer. If the drive type is 'Job', auto-cancels all other pending student applications and interview schedules.
+      tags:
+        - Students
+      parameters:
+        - in: path
+          name: application_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Offer accepted. Other pending roles closed out.
+
+  /api/student_application/{application_id}/reject_offer:
+    put:
+      summary: Reject Job Offer
+      description: Rejects selected placement offer. Notifies recruiting company.
+      tags:
+        - Students
+      parameters:
+        - in: path
+          name: application_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Offer rejected successfully.
+
+  /api/student_interviews:
+    get:
+      summary: List Student Interviews
+      description: Returns scheduled interview rounds for student, sorted by date.
+      tags:
+        - Students
+      responses:
+        '200':
+          description: List of scheduled interviews.
+
+  /api/interview_rounds/{application_id}:
+    get:
+      summary: Retrieve Application Interview Logs
+      description: Returns all individual round reports and parameters associated with a single student application.
+      tags:
+        - Students
+      parameters:
+        - in: path
+          name: application_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of interview rounds.
+
+  /api/apply/{drive_id}:
+    get:
+      summary: Get Drive Application Detail
+      description: Returns application state details if student has already applied to this specific drive.
+      tags:
+        - Students
+      parameters:
+        - in: path
+          name: drive_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Details of the application.
+        '404':
+          description: No application found.
+    post:
+      summary: Apply to Drive
+      description: Verifies cgpa, skill requirements, and department eligibility before saving student application.
+      tags:
+        - Students
+      parameters:
+        - in: path
+          name: drive_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                resume:
+                  type: string
+                  format: binary
+                  description: Optional resume override, else uses default profile resume.
+                available_immediately:
+                  type: boolean
+                available_from:
+                  type: string
+                  format: date
+                  description: Availability start date (YYYY-MM-DD) if not immediate.
+                availability_remarks:
+                  type: string
+      responses:
+        '201':
+          description: Application successfully submitted.
+        '400':
+          description: Missing profile setup or closed drive deadline.
+        '403':
+          description: Not eligible based on CGPA, Department, or Skills; or student already secured a Job.
+
+  /api/export:
+    get:
+      summary: Trigger CSV Export
+      description: Asynchronously launches Celery task to export student applications and details to CSV.
+      tags:
+        - Students
+      responses:
+        '200':
+          description: Export task initiated. Returns task ID.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    example: a7b8-4c9d...
+
+  /api/csv_result/{task_id}:
+    get:
+      summary: Download Exported CSV File
+      description: Downloads the generated CSV file for the corresponding task ID.
+      tags:
+        - Students
+      parameters:
+        - in: path
+          name: task_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: CSV file attachment payload.
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+
+  /api/placement_drives:
+    get:
+      summary: Get Placement Drives
+      description: Returns active drives for students, or company's own postings for company logins.
+      tags:
+        - Companies
+      responses:
+        '200':
+          description: Array of drives.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlacementDrive'
+    post:
+      summary: Submit Placement Drive Posting
+      description: Submits a new job/internship drive, which is placed in 'Pending' status awaiting admin approval.
+      tags:
+        - Companies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlacementDriveInput'
+      responses:
+        '201':
+          description: Drive submitted.
+    put:
+      summary: Update Drive Status (e.g. Admin Approval)
+      description: Sets drive to approved (Active), rejected, or closed, and triggers notification emails.
+      tags:
+        - Companies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - Status
+                - DriveID
+              properties:
+                DriveID:
+                  type: integer
+                Status:
+                  type: string
+                  enum: [Approved, Rejected, Closed]
+                remarks:
+                  type: string
+      responses:
+        '200':
+          description: Drive status updated successfully.
+
+  /api/drive_templates:
+    get:
+      summary: List Drive Templates
+      description: Retrieves saved templates for company recruiters.
+      tags:
+        - Companies
+      responses:
+        '200':
+          description: List of company drive templates.
+    post:
+      summary: Create Job Template
+      description: Stores job description text details as a reusable template.
+      tags:
+        - Companies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - TemplateName
+                - JobTitle
+                - JobDescription
+              properties:
+                TemplateName:
+                  type: string
+                JobTitle:
+                  type: string
+                JobDescription:
+                  type: string
+      responses:
+        '201':
+          description: Template saved.
+
+  /api/drive_templates/{template_id}:
+    get:
+      summary: Get Specific Template
+      description: Returns template specification details.
+      tags:
+        - Companies
+      parameters:
+        - in: path
+          name: template_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Template properties.
+        '404':
+          description: Template not found.
+    delete:
+      summary: Delete Template
+      description: Removes a saved template.
+      tags:
+        - Companies
+      parameters:
+        - in: path
+          name: template_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Template deleted.
+
+  /api/drive_application/{drive_id}:
+    put:
+      summary: Close Placement Drive
+      description: Closes drive and automatically rejects all applicants who are not in 'Hired' state, notifying them.
+      tags:
+        - Companies
+      parameters:
+        - in: path
+          name: drive_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Drive Closed successfully.
+
+  /api/employer_details:
+    get:
+      summary: Get Employer Profile
+      description: Returns verified company profile properties.
+      tags:
+        - Companies
+      responses:
+        '200':
+          description: Company profile object.
+    post:
+      summary: Update Employer Profile
+      description: Updates company registration contact fields, website, addresses, description, and logo.
+      tags:
+        - Companies
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                comp_name:
+                  type: string
+                contact:
+                  type: string
+                website:
+                  type: string
+                address:
+                  type: string
+                gstin:
+                  type: string
+                desc:
+                  type: string
+                secondary_email:
+                  type: string
+                logo_image:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Employer profile saved.
+
+  /api/company_profile:
+    get:
+      summary: View Company Profile JSON
+      description: Fetches raw company profile attributes.
+      tags:
+        - Companies
+      responses:
+        '200':
+          description: Company profile model dict.
+    post:
+      summary: Edit Company Profile Attributes
+      description: Allows JSON edits to secondary emails and description. Admin users can edit core business details.
+      tags:
+        - Companies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description:
+                  type: string
+                secondary_email:
+                  type: string
+                company_name:
+                  type: string
+                address:
+                  type: string
+                contact:
+                  type: string
+                website:
+                  type: string
+                gstin:
+                  type: string
+                user_id:
+                  type: integer
+                  description: (Admin Only) Target user ID to update.
+      responses:
+        '200':
+          description: Profile fields updated.
+
+  /api/company_logo:
+    post:
+      summary: Upload Company Logo File
+      description: Replaces company branding image file.
+      tags:
+        - Companies
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - logo_image
+              properties:
+                logo_image:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Branding logo updated.
+
+  /api/company_applications:
+    get:
+      summary: List Company Drive Applications
+      description: Returns applicants across all company drives with support for query filters (cgpa, type, q).
+      tags:
+        - Companies
+      parameters:
+        - in: query
+          name: type
+          schema:
+            type: string
+          description: Filter by Type (Job/Internship)
+        - in: query
+          name: cgpa
+          schema:
+            type: number
+          description: Minimum CGPA filter
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Search term matching student name, roll, or job title
+      responses:
+        '200':
+          description: List of applications with summary metrics.
+
+  /api/company_applications/{application_id}:
+    put:
+      summary: Screen Application Status (Company Panel)
+      description: Recruiter updates application candidate status (Pending/Shortlisted/Interviewing/Selected/Rejected/Hired). Rejection requires a reason.
+      tags:
+        - Companies
+      parameters:
+        - in: path
+          name: application_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [Pending, Shortlisted, Interviewing, Selected, Rejected, Hired]
+                rejection_reason:
+                  type: string
+                  description: Mandatory if status is 'Rejected'.
+      responses:
+        '200':
+          description: Application screening status saved.
+        '400':
+          description: Rejection reason missing, or status is invalid.
+
+  /api/company_details/{id}:
+    get:
+      summary: Get Company Profile by ID
+      description: Public lookup endpoint returning company info.
+      tags:
+        - Companies
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Company details.
+
+  /api/company_dashboard_summary:
+    get:
+      summary: Get Company Analytics and KPI Telemetry
+      description: Returns recruitment funnel metrics, actions needed, insights, and applicant distributions.
+      tags:
+        - Companies
+      responses:
+        '200':
+          description: Active dashboard summary package.
+
+  /api/company_drive_stats:
+    get:
+      summary: Get Top Drive Applicant Tallies
+      description: Returns top 5 company placement drives sorted by applicant volume.
+      tags:
+        - Companies
+      responses:
+        '200':
+          description: Drive applicant tallies.
+
+  /api/company_interviews:
+    get:
+      summary: List Company Interviews
+      description: Lists company job postings that currently have interviews scheduled.
+      tags:
+        - Companies
+      responses:
+        '200':
+          description: Company interviews list.
+
+  /api/company_interviews/{interview_id}:
+    put:
+      summary: Update Scheduled Interview Status
+      description: Formally reschedules or cancels a scheduled candidate interview.
+      tags:
+        - Companies
+      parameters:
+        - in: path
+          name: interview_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+                - reason
+              properties:
+                action:
+                  type: string
+                  enum: [reschedule, cancel]
+                datetime:
+                  type: string
+                  format: date-time
+                  description: Mandatory for rescheduling actions.
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Interview rescheduled or canceled.
+
+  /api/drive_viewing/{drive_id}:
+    get:
+      summary: Get Specific Drive Recruitment Analysis
+      description: Aggregates CGPA distributions, applicant departments, skills demand, and details of hired candidates.
+      tags:
+        - Companies
+      parameters:
+        - in: path
+          name: drive_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Analytics dashboard package.
+
+  /api/view_application/{application_id}:
+    get:
+      summary: Get Candidate Profile details for Screening
+      description: Returns candidate profile credentials and current screening status.
+      tags:
+        - Companies
+      parameters:
+        - in: path
+          name: application_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Application data dictionary.
+    put:
+      summary: Screen Candidate Status (Advanced)
+      description: Comprehensive screening endpoint supporting normal status changes, rejections, and rejection revocation/restoration.
+      tags:
+        - Companies
+      parameters:
+        - in: path
+          name: application_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                rejection_reason:
+                  type: string
+                note_for_student:
+                  type: string
+                remarks:
+                  type: string
+                student_facing_remarks:
+                  type: string
+      responses:
+        '200':
+          description: Updated applicant state.
+    post:
+      summary: Schedule Interview Round
+      description: Creates a scheduled interview session for the candidate. Checks candidate scheduling collisions.
+      tags:
+        - Companies
+      parameters:
+        - in: path
+          name: application_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+                - datetime
+                - location
+              properties:
+                status:
+                  type: string
+                  example: Interviewing
+                datetime:
+                  type: string
+                  format: date-time
+                location:
+                  type: string
+                remarks:
+                  type: string
+                student_facing_remarks:
+                  type: string
+                force_proceed:
+                  type: boolean
+                  description: Force schedule even if company panel collision is flagged.
+      responses:
+        '200':
+          description: Interview scheduled successfully.
+        '400':
+          description: Datetime is not in future, or configuration round mismatch.
+        '422':
+          description: Student has collision clash.
+        '409':
+          description: Recruiter warning for panel clash.
+
+  /api/application/{application_id}/send_offer:
+    post:
+      summary: Send Placement Offer
+      description: Initiates backend generation task to compose PDF offer letter and email it to the candidate.
+      tags:
+        - Companies
+      parameters:
+        - in: path
+          name: application_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - offer_expiry_date
+                - joining_date
+              properties:
+                offer_expiry_date:
+                  type: string
+                  format: date
+                  example: "2026-07-01"
+                joining_date:
+                  type: string
+                  format: date
+                  example: "2026-08-01"
+                message:
+                  type: string
+      responses:
+        '202':
+          description: Asynchronous PDF generation started. Returns task ID.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  task_id:
+                    type: string
+        '400':
+          description: Application not in 'Selected' state.
+
+  /api/posted_drive_stats/{drive_id}:
+    get:
+      summary: Get Drive Applicants KPI Summary
+      description: Returns applicant counts, shortlisted counts, and hired counts.
+      tags:
+        - Companies
+      parameters:
+        - in: path
+          name: drive_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Dashboard stats summary.
+
+  /api/application/{application_id}/extend_offer:
+    put:
+      summary: Extend Offer Expiry Date
+      description: Extends expiration timeline for candidate response.
+      tags:
+        - Companies
+      parameters:
+        - in: path
+          name: application_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - new_expiry_date
+              properties:
+                new_expiry_date:
+                  type: string
+                  format: date
+                  example: "2026-07-15"
+      responses:
+        '200':
+          description: Offer timeline successfully extended.
+
+  /api/admin_dashboard:
+    get:
+      summary: Admin KPI Telemetry
+      description: Retrieves core system telemetry aggregates (students, companies, offers released, active drives) and registration records.
+      tags:
+        - Administration
+      responses:
+        '200':
+          description: Aggregate statistics bundle.
+
+  /api/departments:
+    get:
+      summary: Get Departments Registry
+      description: Lists registered departments.
+      tags:
+        - Administration
+      responses:
+        '200':
+          description: Registry list of department strings.
+    post:
+      summary: Create Department
+      description: Adds department definition parameter.
+      tags:
+        - Administration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - department
+              properties:
+                department:
+                  type: string
+      responses:
+        '200':
+          description: Department successfully created.
+
+  /api/departments/{id}:
+    delete:
+      summary: Remove Department definition
+      description: Deletes department registry category.
+      tags:
+        - Administration
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Department deleted.
+
+  /api/admin/companies:
+    get:
+      summary: List Companies
+      description: Allows administrators to review all company registrations and their response delay metrics.
+      tags:
+        - Administration
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Search term
+        - in: query
+          name: department
+          schema:
+            type: string
+          description: Filter by department
+      responses:
+        '200':
+          description: List of companies.
+
+  /api/admin/company/{company_id}:
+    put:
+      summary: Update Company Registration Status
+      description: Review gate to approve, reject, disable, or enable company accounts.
+      tags:
+        - Administration
+      parameters:
+        - in: path
+          name: company_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [approved, rejected, disabled, enabled, re-evaluate]
+      responses:
+        '200':
+          description: Company status updated.
+
+  /api/admin/drives/{drive_id}/interviews:
+    get:
+      summary: List Drive Interviews (Admin View)
+      description: Lists student interview slots for a specific drive.
+      tags:
+        - Administration
+      parameters:
+        - in: path
+          name: drive_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Drive interviews payload.
+
+  /api/admin/drives/{drive_id}/interviews/{interview_id}:
+    put:
+      summary: Force Reschedule/Cancel Interview (Admin Override)
+      description: Enables administrative bypass to force rescheduling or cancellation of a scheduled interview round.
+      tags:
+        - Administration
+      parameters:
+        - in: path
+          name: drive_id
+          required: true
+          schema:
+            type: integer
+        - in: path
+          name: interview_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+                - reason
+              properties:
+                action:
+                  type: string
+                  enum: [reschedule, cancel]
+                datetime:
+                  type: string
+                  format: date-time
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Overrode interview state.
+
+  /api/admin/reports/placement_rates:
+    get:
+      summary: Get Department Placement Rates
+      description: Aggregates total students, hired students, and placement percentage rate parameters split by department.
+      tags:
+        - Administration
+      responses:
+        '200':
+          description: Statistics list.
+
+  /api/admin/reports/unplaced_students:
+    get:
+      summary: List Unplaced Students
+      description: Lists student records who have not yet secured placement.
+      tags:
+        - Administration
+      responses:
+        '200':
+          description: List of unplaced students.
+
+  /api/admin/reports/hired_insights:
+    get:
+      summary: Get Hired Salary Analytics
+      description: Returns department salary packages (average, highest package ranges).
+      tags:
+        - Administration
+      responses:
+        '200':
+          description: Analytical hired salary trends.
+
+  /api/admin/reports/multiple_offers:
+    get:
+      summary: Retrieve Multiple Offer Holders
+      description: Lists student profile details containing multiple offer letters.
+      tags:
+        - Administration
+      responses:
+        '200':
+          description: List of candidates with multiple offers.
+
+  /api/admin/students:
+    get:
+      summary: List Students
+      description: Lists all student profiles and application volume counts.
+      tags:
+        - Administration
+      responses:
+        '200':
+          description: Student lists.
+
+  /api/admin/student/{user_id}/manage:
+    post:
+      summary: Manage Student Suspensions
+      description: Suspends (disables) or reactivates student accounts. Log histories are recorded.
+      tags:
+        - Administration
+      parameters:
+        - in: path
+          name: user_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  enum: [disable, enable]
+                note:
+                  type: string
+      responses:
+        '200':
+          description: Student status modified.
+
+  /api/admin/student/{user_id}/applications:
+    get:
+      summary: View Student Applications History (Admin View)
+      description: Fetches full application submissions logs of a target student user.
+      tags:
+        - Administration
+      parameters:
+        - in: path
+          name: user_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Applications list.
+
+  /api/admin/student/{user_id}:
+    get:
+      summary: Get Student Profile Details
+      description: View full student profile info by user ID.
+      tags:
+        - Administration
+      parameters:
+        - in: path
+          name: user_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Student profile records.
+
+  /api/admin/drives:
+    get:
+      summary: List Placement Drives (Admin View)
+      description: Lists all drives regardless of status.
+      tags:
+        - Administration
+      responses:
+        '200':
+          description: Drives list.
+
+  /api/admin/drives/{drive_id}:
+    put:
+      summary: Update Drive Details (Admin View)
+      description: Updates CGPA threshold, salary package, vacancies, and status configurations.
+      tags:
+        - Administration
+      parameters:
+        - in: path
+          name: drive_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                min_cgpa:
+                  type: number
+                  format: float
+                Salary:
+                  type: string
+                Vacancies:
+                  type: integer
+                Status:
+                  type: string
+                remarks:
+                  type: string
+      responses:
+        '200':
+          description: Drive configuration updated.
+
+  /api/admin/monthly_report:
+    get:
+      summary: View Monthly Report Status
+      description: Checks status of monthly reports, including download link if ready.
+      tags:
+        - Administration
+      responses:
+        '200':
+          description: Report status info.
+    post:
+      summary: Trigger Monthly Report Compilation
+      description: Triggers Celery worker task to compile and email monthly report PDF.
+      tags:
+        - Administration
+      responses:
+        '202':
+          description: Task generated.
+
+  /api/admin/support_queries:
+    get:
+      summary: List Support Queries
+      description: Lists support tickets submitted by students and companies.
+      tags:
+        - Administration
+      responses:
+        '200':
+          description: Queries list.
+
+  /api/admin/support_queries/{query_id}:
+    put:
+      summary: Resolve Support Query
+      description: Solves ticket, marking it as resolved in database.
+      tags:
+        - Administration
+      parameters:
+        - in: path
+          name: query_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - resolution
+              properties:
+                resolution:
+                  type: string
+      responses:
+        '200':
+          description: Support query resolved.
+
+  /api/public_stats:
+    get:
+      summary: Public Analytics Telemetry
+      description: Aggregates real-time statistics ribbon counters and department breakdown charts.
+      tags:
+        - Common & Public
+      responses:
+        '200':
+          description: Telemetry data dictionary.
+
+  /api/task_status/{task_id}:
+    get:
+      summary: Poll Celery Task Status
+      description: Returns task status (PENDING, SUCCESS, FAILURE).
+      tags:
+        - Common & Public
+      parameters:
+        - in: path
+          name: task_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Current background job execution state.
+
+  /api/notifications:
+    get:
+      summary: Retrieve Top Notifications
+      description: Fetches latest notifications for current user.
+      tags:
+        - Common & Public
+      responses:
+        '200':
+          description: Notifications.
+    put:
+      summary: Mark Notifications Read
+      description: Marks all unread user notifications as read.
+      tags:
+        - Common & Public
+      responses:
+        '200':
+          description: Notifications marked read.
+
+  /api/support_query:
+    post:
+      summary: Raise Support Ticket
+      description: Creates support message query and alerts administrators.
+      tags:
+        - Common & Public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                message:
+                  type: string
+      responses:
+        '201':
+          description: Support query logged.
+
+components:
+  securitySchemes:
+    tokenAuth:
+      type: apiKey
+      in: header
+      name: Authentication-Token
+      description: Enter your Flask-Security token here.
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: session
+      description: Flask session cookie for authentication.
+
+  schemas:
+    PlacementDrive:
+      type: object
+      properties:
+        DriveID:
+          type: integer
+        JobTitle:
+          type: string
+        Type:
+          type: string
+          example: Job
+        Status:
+          type: string
+          example: Active
+        ApplyDeadline:
+          type: string
+          format: date-time
+        company_name:
+          type: string
+        CompanyID:
+          type: integer
+        Departments:
+          type: array
+          items:
+            type: string
+        JobDescription:
+          type: string
+        Vacancies:
+          type: integer
+        RequiredSkills:
+          type: array
+          items:
+            type: string
+        InterviewRounds:
+          type: array
+          items:
+            type: string
+        Duration:
+          type: string
+        Location:
+          type: string
+        Salary:
+          type: string
+        logo_image:
+          type: string
+        Remark:
+          type: string
+        min_cgpa:
+          type: number
+          format: float
+        WorkMode:
+          type: string
+        noRounds:
+          type: integer
+        PostedDate:
+          type: string
+          format: date-time
+        RejectionDate:
+          type: string
+          format: date-time
+
+    PlacementDriveInput:
+      type: object
+      required:
+        - JobTitle
+        - JobDescription
+        - WorkMode
+        - ApplyDeadline
+        - Type
+        - Location
+        - Salary
+        - Status
+      properties:
+        JobTitle:
+          type: string
+        JobDescription:
+          type: string
+        Departments:
+          type: array
+          items:
+            type: string
+        Vacancies:
+          type: integer
+        RequiredSkills:
+          type: array
+          items:
+            type: string
+        WorkMode:
+          type: string
+        ApplyDeadline:
+          type: string
+          format: date-time
+        Type:
+          type: string
+        Location:
+          type: string
+        Salary:
+          type: string
+        Status:
+          type: string
+          example: Pending
+        noRounds:
+          type: integer
+        InterviewRounds:
+          type: array
+          items:
+            type: string
+        Duration:
+          type: string
+
+    StudentProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        name:
+          type: string
+        roll_no:
+          type: string
+        phone:
+          type: string
+        cgpa:
+          type: number
+          format: float
+        department:
+          type: string
+        skills:
+          type: array
+          items:
+            type: string
+        linkedin:
+          type: string
+        github:
+          type: string
+        certificates_link:
+          type: string
+        resume:
+          type: string
+        email:
+          type: string
+        about_me:
+          type: string
+        registration_date:
+          type: string
+          format: date
+
+    CompanyProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        company_name:
+          type: string
+        address:
+          type: string
+        contact:
+          type: string
+        website:
+          type: string
+        logo_image:
+          type: string
+        gstin:
+          type: string
+        description:
+          type: string
+        secondary_email:
+          type: string
+        is_approved:
+          type: boolean
+        registration_date:
+          type: string
+          format: date
