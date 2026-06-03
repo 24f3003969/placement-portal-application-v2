@@ -1,5 +1,6 @@
 import StudentResource from '../components/StudentResource.js';
 import DriveDetailsView from '../components/drive_details_view.js';
+import { formatDateTime } from '../utils/formatDateTime.js';
 
 const StudentDashboard = {
     template: `
@@ -86,6 +87,7 @@ const StudentDashboard = {
                             <h6 class="fw-bold mb-1">{{ nextEvent.drive.company_name }} <span class="fw-normal fs-6 opacity-75">| {{ nextEvent.drive.JobTitle }}</span></h6>
                             <p class="mb-2 small"><strong>Round {{ nextEvent.round_no }}:</strong> {{ nextEvent.round_name }}</p>
                             <div v-if="nextEvent.location_or_link">
+                                <span v-if="nextEvent.datetime" class="small">{{formatDateTime(nextEvent.datetime, true)}}</span>
                                 <a v-if="isUrl(nextEvent.location_or_link)" :href="nextEvent.location_or_link" target="_blank" class="btn btn-sm btn-light fw-bold rounded-pill px-3 shadow-sm text-primary" style="font-size: 0.8rem;">
                                     Join Meeting <i class="bi bi-camera-video-fill ms-1"></i>
                                 </a>
@@ -351,6 +353,7 @@ const StudentDashboard = {
         }
     },
     methods: {
+        formatDateTime,
         async fetchAllData() {
             const token = localStorage.getItem('token');
             const headers = { 'Authentication-Token': token };

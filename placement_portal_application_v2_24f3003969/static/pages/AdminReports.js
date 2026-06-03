@@ -40,7 +40,11 @@ const AdminReports = {
                                     </thead>
                                     <tbody>
                                         <tr v-for="student in unplacedStudents" :key="student.user_id">
-                                            <td>{{ student.name }}</td>
+                                            <td>
+                                                <a href="#" @click.prevent="openProfileModal(student.user_id, 'details')" class="text-decoration-none fw-semibold text-primary">
+                                                    {{ student.name }}
+                                                </a>
+                                            </td>
                                             <td>{{ student.roll_no }}</td>
                                         </tr>
                                     </tbody>
@@ -63,9 +67,17 @@ const AdminReports = {
                                         </thead>
                                         <tbody>
                                             <tr v-for="student in multipleOfferHolders" :key="student.user_id">
-                                                <td>{{ student.name }}</td>
+                                                <td>
+                                                    <a href="#" @click.prevent="openProfileModal(student.user_id, 'details')" class="text-decoration-none fw-semibold text-primary">
+                                                        {{ student.name }}
+                                                    </a>
+                                                </td>
                                                 <td>{{ student.roll_no }}</td>
-                                                <td><span class="badge bg-success rounded-pill fs-6">{{ student.offer_count }}</span></td>
+                                                <td>
+                                                    <span class="badge bg-success rounded-pill fs-6" style="cursor: pointer;" @click="viewStudentOffers(student)" title="View offers">
+                                                        {{ student.offer_count }}
+                                                    </span>
+                                                </td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -156,7 +168,7 @@ const AdminReports = {
             <div class="modal-dialog modal-xl">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title fw-bold">Student Profile Overview</h5>
+                        <h5 class="modal-title fw-bold">Student Profile</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body p-0">
