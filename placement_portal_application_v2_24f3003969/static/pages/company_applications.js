@@ -9,7 +9,6 @@ const GettedApplications = {
             <div class="row align-items-center g-3 p-3 bg-white border-bottom shadow-sm mb-3 rounded">
                 <div class="col-md-12">
                     <div class="d-flex flex-wrap align-items-center gap-3">
-                        <!-- Drop-Down Drive Filter (Removes HR Confusion) -->
                         <div class="dropdown">
                             <button class="btn btn-light border dropdown-toggle btn-sm fw-bold" type="button" data-bs-toggle="dropdown">
                                 <i class="bi bi-funnel-fill me-1"></i> Filter Dashboard
