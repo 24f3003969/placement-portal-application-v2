@@ -142,12 +142,13 @@ class NotificationAPI(Resource):
         notifs = Notification.query.filter_by(user_id=current_user.id).order_by(Notification.created_at.desc()).limit(100).all()
         filtered_notifs = [n for n in notifs if Notification.should_notify(n.message)]
         top_filtered = filtered_notifs[:20]
+        from zoneinfo import ZoneInfo
         return [{
             "id": n.id,
             "message": n.message,
             "type": n.type,
             "is_read": n.is_read,
-            "created_at": n.created_at.strftime('%d %b, %H:%M')
+            "created_at": n.created_at.replace(tzinfo=ZoneInfo('UTC')).astimezone(ZoneInfo('Asia/Kolkata')).strftime('%d %b, %H:%M')
         } for n in top_filtered], 200
 
     @auth_required('token')

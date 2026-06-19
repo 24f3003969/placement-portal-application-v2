@@ -10,7 +10,7 @@ from sqlalchemy.orm import joinedload
 
 from application.extensions import db, cache
 from application.models import (
-    Application, StudentProfile, PlacementDrives, Interview
+    Application, StudentProfile, PlacementDrives, Interview, Placement
 )
 from .shared import create_notification, format_date
 
@@ -74,6 +74,9 @@ student_app_fields = {
     'student_id': fields.Integer,
     'resume': fields.String(attribute=lambda x: x.resume if getattr(x, 'resume', None) else getattr(x.student, 'resume', None)),
     'status': fields.String,
+    'is_currently_eligible': fields.Boolean(attribute=lambda x: x.check_current_eligibility()[0]),
+    'eligibility_issues': fields.Raw(attribute=lambda x: x.check_current_eligibility()[1]),
+    'is_offer_expired': fields.Boolean(attribute=lambda x: (x.placement.offer_expiry_date < datetime.now().date()) if (x.placement and x.placement.offer_expiry_date) else False),
     'application_date': fields.String(attribute=lambda x: x.application_datetime.isoformat() if getattr(x, 'application_datetime', None) else None),
     'application_datetime': fields.String(attribute=lambda x: x.application_datetime.isoformat() if x.application_datetime else None), # The full ISO timestamp
     'offer_letter': fields.String(attribute=lambda x: x.placement.offer_letter if x.placement else None),
@@ -112,6 +115,8 @@ student_interview_fields = {
     'student_facing_remarks': fields.String,
     'result': fields.String,
     'reschedule_count': fields.Integer,
+    'is_currently_eligible': fields.Boolean(attribute=lambda x: x.application.check_current_eligibility()[0] if x.application else True),
+    'eligibility_issues': fields.Raw(attribute=lambda x: x.application.check_current_eligibility()[1] if x.application else []),
     'drive': fields.Nested({
         'JobTitle': fields.String,
         'company_name': fields.String,
@@ -162,8 +167,10 @@ class ApplyForDrive(Resource):
                 return {"message": "Drive not found"}, 404
 
             # Verify if the drive is closed or deadline has passed
-            if drive.Status in ['Closed', 'Application Closed'] or (drive.ApplyDeadline and drive.ApplyDeadline <= datetime.now()):
-                if drive.Status not in ['Closed', 'Application Closed']:
+            from zoneinfo import ZoneInfo
+            today_kolkata = datetime.now(ZoneInfo('Asia/Kolkata')).date()
+            if drive.Status == 'Application Closed' or (drive.ApplyDeadline and drive.ApplyDeadline < today_kolkata):
+                if drive.Status != 'Application Closed':
                     drive.Status = 'Application Closed'
                     db.session.commit()
                     cache.clear()
@@ -212,6 +219,8 @@ class ApplyForDrive(Resource):
                     available_from_dt = datetime.strptime(args['available_from'], '%Y-%m-%d').date()
                 except ValueError:
                     return {"message": "Invalid date format for availability. Use YYYY-MM-DD"}, 400
+                if available_from_dt < datetime.now().date():
+                    return {"message": "Availability date cannot be in the past."}, 400
             new_app = Application(
                 DriveID=drive_id,
                 student_id=stud.id,
@@ -340,7 +349,7 @@ class StudentProfileApi(Resource):
     @auth_required('session', 'token')
     def post(self):
         try:
-            data = request.get_json()
+            data = request.get_json() or {}
             user_id_to_update = current_user.id
             is_admin = 'admin' in [role.name for role in current_user.roles]
 
@@ -368,9 +377,19 @@ class StudentProfileApi(Resource):
                 else:
                     profile.skills = skills_data
             
+            cgpa_val = data.get('cgpa')
+            if cgpa_val is not None:
+                try:
+                    cgpa_float = float(cgpa_val)
+                    if 0 <= cgpa_float <= 10:
+                        profile.cgpa = cgpa_float
+                    else:
+                        return {"message": "CGPA must be between 0 and 10"}, 400
+                except ValueError:
+                    return {"message": "CGPA must be a valid number"}, 400
+
             if is_admin:
                 profile.roll_no = get_valid_value('roll_no', profile.roll_no)
-                profile.cgpa = get_valid_value('cgpa', profile.cgpa)
                 profile.department = get_valid_value('department', profile.department)
 
             db.session.commit()
@@ -392,6 +411,7 @@ class StudentResumeAPI(Resource):
             print(f"File received :{resume_file if resume_file else 'None'}")
             if not resume_file:
                 return {"message": "No file uploaded"}, 400
+
             profile = StudentProfile.query.filter_by(user_id=current_user.id).first()
             if not profile:
                 return {"message": "Profile not found"}, 404
@@ -499,6 +519,9 @@ class StudentApplicationCancelAPI(Resource):
             if not application:
                 return {"message": "Application not found or unauthorized"}, 404
             
+            if application.status != 'Pending':
+                return {"message": "Only pending applications can be cancelled."}, 400
+            
             # delete application
             db.session.delete(application)
             db.session.commit()
@@ -525,6 +548,10 @@ class StudentOfferAcceptAPI(Resource):
         
         if application.status != 'Selected':
             return {"message": "No active offer to respond to for this application."}, 400
+
+        if application.placement and application.placement.offer_expiry_date:
+            if application.placement.offer_expiry_date < datetime.now().date():
+                return {"message": "This offer has expired. Please contact support or the employer to request an extension."}, 400
 
         # --- START of new logic ---
         # Check if the accepted offer is for a 'Job'
@@ -556,10 +583,10 @@ class StudentOfferAcceptAPI(Resource):
                 if app.placement:
                     app.placement.offer_status = 'Cancelled'
 
-                # Also cancel any scheduled interviews for this application
+                # Also cancel any scheduled/suspended interviews for this application
                 interviews_to_cancel = Interview.query.filter(
                     Interview.application_id == app.id,
-                    Interview.status == 'scheduled'
+                    Interview.status.in_(['scheduled', 'suspended'])
                 ).all()
                 for interview in interviews_to_cancel:
                     interview.status = 'canceled'
@@ -588,6 +615,12 @@ class StudentOfferRejectAPI(Resource):
         if application.status != 'Selected':
             return {"message": "No active offer to respond to for this application."}, 400
 
+        if application.placement and application.placement.offer_expiry_date:
+            if application.placement.offer_expiry_date < datetime.now().date():
+                return {"message": "This offer has expired. Please contact support or the employer to request an extension."}, 400
+
+        if application.status != 'Rejected':
+            application.previous_status = application.status
         application.status = 'Rejected'
         application.rejection_reason = 'Offer rejected by student.'
         application.updated_time = datetime.now()

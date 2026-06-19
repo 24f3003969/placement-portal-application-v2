@@ -109,3 +109,44 @@ def get_drive_insights(drive_id):
         "least_common_skill": least_common_skill,
         "department_distribution": department_distribution
     }
+
+def run_expired_drives_sweep():
+    from application.models import PlacementDrives
+    from application.extensions import db
+    from zoneinfo import ZoneInfo
+    from datetime import datetime
+    from application.tasks import send_drive_status_update_email_task
+    
+    today = datetime.now(ZoneInfo('Asia/Kolkata')).date()
+    
+    # 1. Active expired drives
+    expired_active = PlacementDrives.query.filter(
+        PlacementDrives.Status == 'Active',
+        PlacementDrives.ApplyDeadline != None,
+        PlacementDrives.ApplyDeadline < today
+    ).all()
+    
+    # 2. Pending expired drives
+    expired_pending = PlacementDrives.query.filter(
+        PlacementDrives.Status == 'Pending',
+        PlacementDrives.ApplyDeadline != None,
+        PlacementDrives.ApplyDeadline < today
+    ).all()
+    
+    modified = False
+    for drive in expired_active:
+        drive.Status = 'Application Closed'
+        modified = True
+        send_drive_status_update_email_task.delay(drive.DriveID, 'Application Closed', 'Application deadline reached.')
+        msg = f"Your placement drive '{drive.JobTitle}' has been closed because the application deadline was reached."
+        create_notification(drive.company.user_id, msg, notif_type='warning')
+        
+    for drive in expired_pending:
+        drive.Status = 'Application Closed'
+        modified = True
+        send_drive_status_update_email_task.delay(drive.DriveID, 'Application Closed', 'Application deadline passed before approval.')
+        msg = f"Your placement drive '{drive.JobTitle}' was not approved before its application deadline passed and is now closed."
+        create_notification(drive.company.user_id, msg, notif_type='warning')
+        
+    if modified:
+        db.session.commit()

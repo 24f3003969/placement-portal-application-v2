@@ -56,7 +56,8 @@ employer_get_fields = {
     'highest_posted_department': fields.String,
     'email': fields.String(attribute='user.email'),
     'drive_departments': fields.Raw(attribute=lambda x: [d.Departments for d in x.drives if d.Departments]),
-    'registration_date': fields.String(attribute=lambda p: p.registration_date.isoformat() if p.registration_date else None)
+    'registration_date': fields.String(attribute=lambda p: p.registration_date.isoformat() if p.registration_date else None),
+    'note': fields.String(attribute='user.note')
 }
 
 department_parser = reqparse.RequestParser()
@@ -94,7 +95,7 @@ student_list_fields = {
     'cgpa': fields.String,
     'drives_applied_count': fields.Integer,
     'is_active': fields.Boolean(attribute='user.active'),
-    'disable_note': fields.String,
+    'note': fields.String(attribute='user.note'),
     'registration_date': fields.String(attribute=lambda p: p.registration_date.isoformat() if p.registration_date else None),
     'skills': fields.String,
     'linkedin': fields.String,
@@ -119,10 +120,12 @@ class AdminDashboardAPI(Resource):
     @roles_required('admin')
     @cache.cached(timeout=300, key_prefix="admin_dashboard")
     def get(self):
+        from .shared import run_expired_drives_sweep
+        run_expired_drives_sweep()
         # 1. Real-Time Pulse (Header Stats)
         active_students_count = StudentProfile.query.join(User).filter(User.active == True).count()
         active_companies_count = CompanyProfile.query.join(User).filter(User.active == True, CompanyProfile.is_approved == True).count()
-        active_drives_count = PlacementDrives.query.filter(PlacementDrives.Status.in_(['Active', 'Approved'])).count()
+        active_drives_count = PlacementDrives.query.filter(PlacementDrives.Status == 'Active').count()
         # A pending company is one that is not yet approved but whose user account is active.
         pending_companies_count = CompanyProfile.query.join(User).filter(
             CompanyProfile.is_approved == False, User.active == True
@@ -179,13 +182,13 @@ class AdminDashboardAPI(Resource):
         work_mode_data = db.session.query(
             PlacementDrives.WorkMode, 
             func.count(PlacementDrives.DriveID)
-        ).filter(PlacementDrives.Status.in_(['Active', 'Approved'])).group_by(PlacementDrives.WorkMode).all()
+        ).filter(PlacementDrives.Status == 'Active').group_by(PlacementDrives.WorkMode).all()
 
         # Aggregate Drive Types (Job vs Internship)
         type_data = db.session.query(
             PlacementDrives.Type, 
             func.count(PlacementDrives.DriveID)
-        ).filter(PlacementDrives.Status.in_(['Active', 'Approved'])).group_by(PlacementDrives.Type).all()
+        ).filter(PlacementDrives.Status == 'Active').group_by(PlacementDrives.Type).all()
 
         activity_hub = {
             "placement_funnel": placement_funnel,
@@ -197,10 +200,12 @@ class AdminDashboardAPI(Resource):
         }
 
         # 4. Urgent Queue (Right Column)
+        from zoneinfo import ZoneInfo
+        now_local = datetime.now(ZoneInfo('Asia/Kolkata')).replace(tzinfo=None)
         all_urgent_drive_approvals_query = PlacementDrives.query.filter(
             PlacementDrives.Status == 'Pending', 
             PlacementDrives.ApplyDeadline != None, 
-            PlacementDrives.ApplyDeadline > datetime.now()
+            PlacementDrives.ApplyDeadline > now_local
         ).order_by(PlacementDrives.ApplyDeadline.asc())
 
         all_urgent_drive_approvals = all_urgent_drive_approvals_query.all()
@@ -238,7 +243,7 @@ class AdminDashboardAPI(Resource):
         top_upcoming_drives = PlacementDrives.query.options(joinedload(PlacementDrives.company)).filter(
             PlacementDrives.Status.in_(['Active', 'Pending']),
             PlacementDrives.ApplyDeadline != None, 
-            PlacementDrives.ApplyDeadline > datetime.now()
+            PlacementDrives.ApplyDeadline > now_local
         ).order_by(PlacementDrives.ApplyDeadline.asc()).limit(3).all()
 
         total_active_students = StudentProfile.query.join(User).filter(User.active == True).count()
@@ -258,12 +263,11 @@ class AdminDashboardAPI(Resource):
                         })
 
         # Insight 2: Engagement
-        now = datetime.now()
-        forty_eight_hours_later = now + timedelta(hours=48)
+        forty_eight_hours_later = now_local + timedelta(hours=48)
         drives_closing_soon = PlacementDrives.query.filter(
             PlacementDrives.Status == 'Active',
             PlacementDrives.ApplyDeadline != None, 
-            PlacementDrives.ApplyDeadline > now,
+            PlacementDrives.ApplyDeadline > now_local,
             PlacementDrives.ApplyDeadline <= forty_eight_hours_later
         ).all()
 
@@ -297,7 +301,7 @@ class AdminDashboardAPI(Resource):
             })
 
         # Insight 4: Velocity
-        current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        current_month_start = now_local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         
         applied_this_month = Application.query.filter(
             Application.application_datetime >= current_month_start
@@ -407,7 +411,7 @@ class AdminCompanyManagementAPI(Resource):
             else:
                 company.has_response_delay = False
 
-            company.approved_drives_count = sum(1 for d in company.drives if d.Status in ['Approved', 'Active', 'Closed'])
+            company.approved_drives_count = sum(1 for d in company.drives if d.Status in ['Active', 'Application Closed'])
             company.rejected_drives_count = sum(1 for d in company.drives if d.Status == 'Rejected')
 
             all_departments = [dept for drive in company.drives if drive.Departments for dept in drive.Departments]
@@ -442,25 +446,98 @@ class AdminCompanyManagementAPI(Resource):
             user.active = True
             send_company_approval_email_task.delay(company.id)
             message = f"{company.company_name} has been approved."
-            create_notification(company.user_id, f"Your company profile '{company.company_name}' has been approved.", "success")
         elif new_status == 'rejected':
             company.is_approved = False
             user.active = False
             send_company_rejection_email_task.delay(company.id)
             message = f"{company.company_name} has been rejected and its account deactivated."
-            create_notification(company.user_id, f"Your company profile '{company.company_name}' has been rejected and deactivated.", "warning")
         elif new_status == 'disabled':
             user.active = False
-            user.disable_note = note
+            user.note = note
             db.session.add(UserStatusHistory(user_id=user.id, status='disabled', changed_by_id=admin_id, note=note))
+            
+            from application.tasks import send_company_disabled_email_task
+            send_company_disabled_email_task.delay(company.id, note)
+            
             message = f"{company.company_name} has been disabled."
-            create_notification(company.user_id, f"Your company account has been disabled. Reason: {note or 'No reason provided.'}", "warning")
+            
+            # Suspend active/approved drives
+            active_drives = PlacementDrives.query.filter(
+                PlacementDrives.CompanyID == company.id,
+                PlacementDrives.Status == 'Active'
+            ).all()
+            for drive in active_drives:
+                drive.Status = 'Suspended'
+                # Notify applicants
+                applications = Application.query.filter_by(DriveID=drive.DriveID).all()
+                for app in applications:
+                    create_notification(
+                        app.student.user_id,
+                        f"The placement drive '{drive.JobTitle}' has been suspended temporarily.",
+                        "warning"
+                    )
+            
+            # Suspend upcoming scheduled interviews
+            drive_ids = [d.DriveID for d in company.drives]
+            if drive_ids:
+                upcoming_interviews = Interview.query.join(Application).filter(
+                    Application.DriveID.in_(drive_ids),
+                    Interview.datetime > datetime.now(),
+                    Interview.status == 'scheduled'
+                ).all()
+                for interview in upcoming_interviews:
+                    interview.previous_status = interview.status
+                    interview.status = 'suspended'
+                    create_notification(
+                        interview.application.student.user_id,
+                        f"Your interview for '{interview.application.drive.JobTitle}' on '{interview.datetime}' has been suspended temporarily.",
+                        "warning"
+                    )
         elif new_status == 'enabled':
             user.active = True
-            user.disable_note = None
+            user.note = note
             db.session.add(UserStatusHistory(user_id=user.id, status='enabled', changed_by_id=admin_id, note=note))
+            
+            from application.tasks import send_company_reactivated_email_task
+            send_company_reactivated_email_task.delay(company.id, note)
+            
             message = f"{company.company_name} has been enabled."
             create_notification(company.user_id, f"Your company account has been re-enabled. Reason: {note or 'No reason provided.'}", "success")
+            
+            # Restore suspended drives
+            suspended_drives = PlacementDrives.query.filter_by(
+                CompanyID=company.id,
+                Status='Suspended'
+            ).all()
+            for drive in suspended_drives:
+                drive.Status = 'Active'
+                # Notify applicants
+                applications = Application.query.filter_by(DriveID=drive.DriveID).all()
+                for app in applications:
+                    create_notification(
+                        app.student.user_id,
+                        f"The suspended placement drive '{drive.JobTitle}' has been restored.",
+                        "success"
+                    )
+            
+            # Restore suspended interviews
+            drive_ids = [d.DriveID for d in company.drives]
+            if drive_ids:
+                suspended_interviews = Interview.query.join(Application).filter(
+                    Application.DriveID.in_(drive_ids),
+                    Interview.status == 'suspended'
+                ).all()
+                for interview in suspended_interviews:
+                    if interview.previous_status:
+                        interview.status = interview.previous_status
+                        interview.previous_status = None
+                    else:
+                        interview.status = 'scheduled'
+                    create_notification(
+                        interview.application.student.user_id,
+                        f"Your interview for '{interview.application.drive.JobTitle}' on '{interview.datetime}' has been restored.",
+                        "success"
+                    )
         elif new_status == "re-evaluate":
             user.active = True
             company.is_approved = False
@@ -743,7 +820,7 @@ class AdminStudentManagementAPI(Resource):
 
         if args['action'] == 'disable':
             user.active = False
-            user.disable_note = args['note']
+            user.note = args['note']
             message = "Student suspended successfully."
 
             # Log status history
@@ -792,13 +869,13 @@ class AdminStudentManagementAPI(Resource):
                 f"Your account has been suspended by the admin. Reason: {args['note'] or 'No reason provided.'}",
                 "warning"
             )
-            # Send suspension email via Celery
-            from application.tasks import send_student_suspension_email_task
-            send_student_suspension_email_task.delay(user.id, args['note'])
+            # Send disable email via Celery
+            from application.tasks import send_student_disabled_email_task
+            send_student_disabled_email_task.delay(user.id, args['note'])
             
         else: # enable
             user.active = True
-            user.disable_note = None
+            user.note = args['note']
             message = "Student reactivated successfully."
 
             # Log status history
@@ -853,7 +930,7 @@ class AdminStudentManagementAPI(Resource):
             )
             # Send reactivation email via Celery
             from application.tasks import send_student_reactivation_email_task
-            send_student_reactivation_email_task.delay(user.id)
+            send_student_reactivation_email_task.delay(user.id, args['note'])
         
         db.session.commit()
         cache.clear()
@@ -946,6 +1023,8 @@ class AdminManageDrivesAPI(Resource):
     @auth_required('token')
     @roles_required('admin')
     def get(self):
+        from .shared import run_expired_drives_sweep
+        run_expired_drives_sweep()
         query = PlacementDrives.query.options(joinedload(PlacementDrives.company))
         drives = query.order_by(PlacementDrives.PostedDate.desc()).all()
         return marshal(drives, placement_drive_fields), 200
@@ -962,26 +1041,57 @@ class AdminManageDrivesAPI(Resource):
         if not drive:
             return {"message": "Drive not found"}, 404
         
+        if drive.Status == 'Application Closed':
+            return {"message": "Closed drives are permanently locked and cannot be modified"}, 400
+        
         status = args['status']
         if status == 'Approved':
-            drive.Status = 'Active'
-        else:
-            drive.Status = status
+            status = 'Active'
+        elif status == 'Closed':
+            status = 'Application Closed'
+            
+        remarks = args.get('remarks')
+        previous_status = drive.Status
+        drive.Status = status
+            
         drive.RejectionDate = None
-        from application.tasks import send_drive_rejection_email_task, send_drive_approval_email_task, close_specific_drive_task
-        if args['status'] == 'Rejected':
-            drive.Remark = args['remarks']
+        if status == 'Rejected':
+            drive.Remark = remarks
             drive.RejectionDate = datetime.now().date()
-            send_drive_rejection_email_task.delay(drive.DriveID)
-            create_notification(drive.company.user_id, f"Your placement drive '{drive.JobTitle}' has been rejected by the administrator. Remark: {drive.Remark}", "warning")
-        elif args['status'] == 'Approved':
-            send_drive_approval_email_task.delay(drive.DriveID)
-            deadline_datetime = drive.ApplyDeadline
-            close_specific_drive_task.apply_async((drive.DriveID,), eta=deadline_datetime)
-            create_notification(drive.company.user_id, f"Your placement drive '{drive.JobTitle}' has been approved by the administrator.", "success")
+        elif status in ['Suspended', 'Application Closed']:
+            drive.Remark = remarks
+
+        from application.tasks import send_drive_status_update_email_task, close_specific_drive_task
+        if status == 'Rejected':
+            send_drive_status_update_email_task.delay(drive.DriveID, 'Rejected', remarks)
+            create_notification(drive.company.user_id, f"Your placement drive '{drive.JobTitle}' has been rejected by the administrator. Remark: {remarks or 'No remark provided.'}", "warning")
+        elif status in(['Active','Pending']):
+            send_drive_status_update_email_task.delay(drive.DriveID, 'Active')
+            deadline_date = drive.ApplyDeadline
+            if deadline_date:
+                from datetime import datetime, time, timedelta
+                from zoneinfo import ZoneInfo
+                
+                # Combine deadline date + 1 day with midnight (00:00) in Kolkata timezone
+                expiry_datetime = datetime.combine(deadline_date + timedelta(days=1), time.min)
+                kolkata_tz = ZoneInfo('Asia/Kolkata')
+                localized_deadline = expiry_datetime.replace(tzinfo=kolkata_tz)
+                
+                utc_deadline = localized_deadline.astimezone(ZoneInfo('UTC'))
+                close_specific_drive_task.apply_async((drive.DriveID,), eta=utc_deadline)
+                
+            msg = f"Your placement drive '{drive.JobTitle}' has been re-activated and is now Active." if previous_status == 'Suspended' else f"Your placement drive '{drive.JobTitle}' has been approved by the administrator."
+            create_notification(drive.company.user_id, msg, "success")
+        elif status == 'Suspended':
+            send_drive_status_update_email_task.delay(drive.DriveID, 'Suspended', remarks)
+            create_notification(drive.company.user_id, f"Your placement drive '{drive.JobTitle}' has been suspended by the administrator. Reason: {remarks or 'No reason provided.'}", "warning")
+        elif status == 'Application Closed':
+            send_drive_status_update_email_task.delay(drive.DriveID, 'Application Closed', remarks)
+            create_notification(drive.company.user_id, f"Your placement drive '{drive.JobTitle}' has been closed by the administrator. Reason: {remarks or 'No reason provided.'}", "warning")
 
         db.session.commit()
-        return {"message": f"Drive status updated to {args['status']}"}, 200
+        cache.clear()
+        return {"message": f"Drive status updated to {status}"}, 200
 
 admin_api.add_resource(AdminManageDrivesAPI, '/admin/drives', '/admin/drives/<int:drive_id>')
 
