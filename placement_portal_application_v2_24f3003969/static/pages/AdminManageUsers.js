@@ -99,16 +99,17 @@ const AdminManageUsers = {
                                         <tr>
                                             <th>Student Name</th>
                                             <th>Roll No</th>
-                                            <th>Disable Note</th>
-                                            <th>Action</th>
+                                            <th>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <tr v-for="student in disabledStudents" :key="student.user_id">
                                             <td>{{ student.name }}</td>
                                             <td>{{ student.roll_no }}</td>
-                                            <td>{{ student.disable_note || 'N/A' }}</td>
-                                            <td><button class="btn btn-sm btn-success" @click="enableStudent(student)">Enable</button></td>
+                                            <td>
+                                                <button class="btn btn-sm btn-info me-1" @click="viewStudentProfile(student)">Profile</button>
+                                                <button class="btn btn-sm btn-success" @click="enableStudent(student)">Enable</button>
+                                            </td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -129,7 +130,7 @@ const AdminManageUsers = {
                         </div>
                         <div class="modal-body">
                             <label class="form-label">Reason/Note (Optional)</label>
-                            <textarea v-model="disableNote" class="form-control"></textarea>
+                            <textarea v-model="note" class="form-control"></textarea>
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -238,12 +239,12 @@ const AdminManageUsers = {
                             <div class="card-body table-scroll-sm">
                                 <div v-if="pendingCompanies.length > 0">
                                     <table class="table table-hover p-0">
-                                        <thead><tr><th>Company Name</th><th>Email</th><th>Age</th><th>Actions</th></tr></thead>
+                                        <thead><tr><th>Company Name</th><th>Email</th><th>Registered</th><th>Actions</th></tr></thead>
                                         <tbody>
                                             <tr v-for="company in pendingCompanies" :key="company.id">
                                                 <td>{{ company.company_name }}</td>
                                                 <td>{{ company.email }}</td>
-                                                <td>{{ formatDateTime(getCompanyAge(company.registration_date),false) }}</td>
+                                                <td>{{ getCompanyAge(company.registration_date) }}</td>
                                                 <td>
                                                     <button class="btn btn-sm btn-info me-1" @click="viewCompanyProfile(company)">View</button>
                                                     <button class="btn btn-sm btn-success me-1" @click="updateCompanyStatus(company.id, 'approved')">Approve</button>
@@ -263,7 +264,7 @@ const AdminManageUsers = {
                             <div class="card-body table-scroll-sm">
                                 <div v-if="rejectedCompanies.length > 0">
                                     <table class="table table-sm">
-                                        <thead><tr><th>Company Name</th><th>Email</th><th>Age</th><th>Action</th></tr></thead>
+                                        <thead><tr><th>Company Name</th><th>Email</th><th>Registered</th><th>Action</th></tr></thead>
                                         <tbody>
                                             <tr v-for="company in rejectedCompanies" :key="company.id">
                                                 <td>{{ company.company_name }}</td>
@@ -271,7 +272,7 @@ const AdminManageUsers = {
                                                 <td>{{ getCompanyAge(company.registration_date) }}</td>
                                                 <td>
                                                     <button class="btn btn-sm btn-info me-1" @click="viewCompanyProfile(company)">View Profile</button>
-                                                    <button class="btn btn-sm btn-info" @click="updateCompanyStatus(company.id,'re-evaluate')">Re-evaluate</button>
+                                                    <button class="btn btn-sm btn-warning" @click="updateCompanyStatus(company.id,'re-evaluate')">Re-evaluate</button>
                                                 </td>
                                             </tr>
                                         </tbody>
@@ -361,7 +362,7 @@ const AdminManageUsers = {
             allStudents: [],
             studentFilters: { q: '', cgpa: '' },
             selectedStudent: null,
-            disableNote: '',
+            note: '',
             studentApplications: [],
             disableStudentModal: null,
             studentAppsModal: null,
@@ -497,12 +498,12 @@ const AdminManageUsers = {
                 alert('Could not fetch applications.'); 
             }
         },
-        openDisableModal(student) { this.selectedStudent = student; this.disableNote = ''; this.disableStudentModal.show(); },
+        openDisableModal(student) { this.selectedStudent = student; this.note = ''; this.disableStudentModal.show(); },
         async disableStudent() {
             const res = await fetch(`/api/admin/student/${this.selectedStudent.user_id}/manage`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authentication-Token': localStorage.getItem('token') },
-                body: JSON.stringify({ action: 'disable', note: this.disableNote })
+                body: JSON.stringify({ action: 'disable', note: this.note })
             });
             if (res.ok) { alert('Student disabled.'); this.disableStudentModal.hide(); this.fetchAllData(); }
             else { alert('Failed to disable student.'); }

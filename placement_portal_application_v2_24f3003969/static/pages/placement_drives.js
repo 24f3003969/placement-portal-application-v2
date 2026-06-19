@@ -74,7 +74,7 @@ const PlacementDrives = {
                                 <input type="radio" class="btn-check" name="driveStatus" id="btnActive" value="Active" v-model="currentStatus" @change="fetchDrives">
                                 <label class="btn btn-outline-primary btn-sm fw-medium py-2" for="btnActive">Active</label>
 
-                                <input type="radio" class="btn-check" name="driveStatus" id="btnClosed" value="Closed" v-model="currentStatus" @change="fetchDrives">
+                                <input type="radio" class="btn-check" name="driveStatus" id="btnClosed" value="Application Closed" v-model="currentStatus" @change="fetchDrives">
                                 <label class="btn btn-outline-primary btn-sm fw-medium py-2" for="btnClosed">Past Drives</label>
                             </div>
                         </div>
@@ -230,7 +230,6 @@ const PlacementDrives = {
             }
 
             // --- 5. SORTING ENGINE ---
-            // Even if the skills toggle is OFF, perfectly eligible drives (CGPA + All Skills) go to the top
             const checkStrictEligibility = (drive) => {
                 const myCgpa = parseFloat(this.profile.cgpa) || 0;
                 const requiredCgpa = parseFloat(drive.min_cgpa) || 0;
@@ -246,13 +245,17 @@ const PlacementDrives = {
             };
 
             results.sort((a, b) => {
+                const getNormalizedSalary = (d) => {
+                    const rawVal = parseFloat(d.Salary) || 0;
+                    return d.Type === 'Job' ? rawVal * 100000 : rawVal * 12;
+                };
                 if (this.selectedSort === 'package_desc') {
-                    const valA = parseFloat(a.Package) || parseFloat(a.Stipend) || 0;
-                    const valB = parseFloat(b.Package) || parseFloat(b.Stipend) || 0;
+                    const valA = getNormalizedSalary(a);
+                    const valB = getNormalizedSalary(b);
                     return valB - valA;
                 } else if (this.selectedSort === 'package_asc') {
-                    const valA = parseFloat(a.Package) || parseFloat(a.Stipend) || 0;
-                    const valB = parseFloat(b.Package) || parseFloat(b.Stipend) || 0;
+                    const valA = getNormalizedSalary(a);
+                    const valB = getNormalizedSalary(b);
                     return valA - valB;
                 } else {
                     const isAEligible = checkStrictEligibility(a);

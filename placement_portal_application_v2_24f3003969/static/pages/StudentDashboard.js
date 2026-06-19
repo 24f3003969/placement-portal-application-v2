@@ -160,7 +160,7 @@ const StudentDashboard = {
                     </div>
                     <div v-else class="text-center text-muted p-2 bg-light rounded-3">
                         <i class="bi bi-search fs-5 text-muted opacity-50 mb-1 d-block"></i>
-                        <p class="mb-0" style="font-size: 0.8rem;">No new matches today.</p>
+                        <p class="mb-0" style="font-size: 0.8rem;">No new matches.</p>
                     </div>
                 </div>
 
@@ -188,7 +188,6 @@ const StudentDashboard = {
                             </div>
                             <div class="ms-2">
                                 <button v-if="activity.display_status === 'Shortlisted'" @click="viewInterview" class="btn btn-sm btn-outline-primary rounded-pill px-2 py-0" style="font-size: 0.75rem;">View</button>
-                                <button v-if="activity.display_status === 'Selected'" @click="viewOffer" class="btn btn-sm btn-outline-success rounded-pill px-2 py-0" style="font-size: 0.75rem;">Offer</button>
                             </div>
                         </div>
                     </div>
@@ -252,27 +251,52 @@ const StudentDashboard = {
             return upcoming.length > 0 ? upcoming[0] : null;
         },
         newMatches() {
-            const today = new Date().toISOString().slice(0, 10);
             const myDept = (this.profile.department || '').toLowerCase().trim();
             const myCGPA = parseFloat(this.profile.cgpa) || 0;
             const mySkills = Array.isArray(this.profile.skills) ? this.profile.skills.map(s => s.toLowerCase().trim()) : [];
+            const appliedDriveIds = this.applications.map(app => app.DriveID);
 
             return this.drives.filter(drive => {
-                if (!drive.PostedDate) return false;
-                const postedDate = new Date(drive.PostedDate).toISOString().slice(0, 10);
-                if (postedDate !== today) return false;
+                // 1. Only active drives
+                if (drive.Status !== 'Active') return false;
 
+                // 2. Has not applied yet
+                if (appliedDriveIds.includes(drive.DriveID)) return false;
+
+                // 3. Posted in the last 7 days
+                if (!drive.PostedDate) return false;
+                const todayStr = new Date().toISOString().slice(0, 10);
+                const postedStr = new Date(drive.PostedDate).toISOString().slice(0, 10);
+                const todayDate = new Date(todayStr);
+                const postedDate = new Date(postedStr);
+                const diffTime = todayDate - postedDate;
+                const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+                if (diffDays < 0 || diffDays > 7) return false;
+
+                // 4. Eligible as per eligibility criteria
+                // CGPA check
                 const driveMinCGPA = parseFloat(drive.min_cgpa) || 0;
                 if (driveMinCGPA > 0 && myCGPA < driveMinCGPA) return false;
 
+                // Department check
                 const driveDepts = Array.isArray(drive.Departments) ? drive.Departments.map(d => (typeof d === 'object' ? (d.department || '') : String(d)).toLowerCase().trim()) : [];
                 if (driveDepts.length > 0 && !driveDepts.includes(myDept)) return false;
 
+                // Skills check
                 const requiredSkills = Array.isArray(drive.RequiredSkills) ? drive.RequiredSkills.map(s => s.toLowerCase().trim()) : [];
                 if (requiredSkills.length > 0) {
                     const hasAllSkills = requiredSkills.every(reqSkill => mySkills.includes(reqSkill));
                     if (!hasAllSkills) return false;
                 }
+
+                // Deadline check
+                if (drive.ApplyDeadline) {
+                    const today = new Date();
+                    today.setHours(0,0,0,0);
+                    const deadline = new Date(drive.ApplyDeadline + 'T00:00:00');
+                    if (deadline < today) return false;
+                }
+
                 return true;
             });
         },
@@ -313,8 +337,10 @@ const StudentDashboard = {
                 if (appliedDriveIds.includes(drive.DriveID)) return false; 
                 if (!drive.ApplyDeadline) return false;
                 
-                const deadline = new Date(drive.ApplyDeadline);
-                if (deadline < now || deadline > in48Hours) return false; 
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                const deadline = new Date(drive.ApplyDeadline + 'T00:00:00');
+                if (deadline < today || deadline > in48Hours) return false; 
 
                 const driveMinCGPA = parseFloat(drive.min_cgpa) || 0;
                 if (driveMinCGPA > 0 && myCGPA < driveMinCGPA) return false;
@@ -432,9 +458,6 @@ const StudentDashboard = {
         },
         viewInterview(){
             this.$router.push({ path: '/student_applications_and_interviews', query: { tab: 'interviews' } } ); 
-        },
-        viewOffer() {
-            this.$router.push({ path: '/student_profile', query: { tab: 'placements' } });
         },
         
         // --- MODAL LOGIC FOR APPLYING ---

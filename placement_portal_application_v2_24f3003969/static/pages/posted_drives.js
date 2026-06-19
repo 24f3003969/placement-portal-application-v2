@@ -5,7 +5,7 @@ import DriveDetailsForm from "../components/drive_details_form.js";
 
 const PostedDrives={
     template:`
-    <div v-if="view==='drives'">
+    <div v-if="view==='drives'" class="container-fluid min-vh-100">
         <div class="row">
             <div class="col-md-2">
                 <div class="card border-0 shadow-sm p-4 rounded-4 bg-light" style="top:20px;">
@@ -23,8 +23,8 @@ const PostedDrives={
                             <label class="form-label small fw-semibold text-muted">Status</label>
                             <select class="form-select form-select-sm border-0 shadow-sm py-2 px-3" v-model="selectedStatus">
                                 <option value="">All Statuses</option>
-                                <option value="Approved">Active/Approved</option>
-                                <option value="Closed">Closed</option>
+                                <option value="Active">Active</option>
+                                <option value="Application Closed">Closed</option>
                                 <option value="Rejected">Rejected</option>
                                 <option value="Pending">Pending</option>
                             </select>
@@ -67,7 +67,7 @@ const PostedDrives={
                     </div>
                 </div>
 
-                <div class="row g-3 drive-scroll">
+                <div class="row g-3 drives-scroll">
                     <div v-for="drive in filteredResources" :key="drive.DriveID" class="col-12 col-lg-6">
                         <student-resource 
                             :drive="drive"
@@ -245,7 +245,7 @@ const PostedDrives={
                 alert("Drive Closed successfully");
                 const drive = this.filteredResources.find(d => d.DriveID === driveId);
                 if (drive) {
-                    drive.Status = 'Closed';
+                    drive.Status = 'Application Closed';
                 }
             } else {
                 alert("Failed to close drive.");
@@ -280,7 +280,7 @@ const PostedDrives={
                 });
                 if (res.ok) {
                     this.allResources = await res.json();
-                    this.active_count = this.allResources.filter(d => d.Status === 'Approved' || d.Status === 'Active').length;
+                    this.active_count = this.allResources.filter(d => d.Status === 'Active').length;
                 }
             } catch (err) {
                 console.error("Fetch drives failed:", err);

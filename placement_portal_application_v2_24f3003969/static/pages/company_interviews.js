@@ -1,4 +1,4 @@
-import { formatDateTime } from '../utils/formatDateTime.js';
+import { formatDateTime, getMinDateTime } from '../utils/formatDateTime.js';
 import StudentProfile from '../components/student_profile.js';
 const InterviewRoundView = {
     props: ['interviews', 'roundNumber', 'totalRounds', 'driveTitle', 'allDriveInterviews'],
@@ -215,7 +215,12 @@ const CompanyInterviews = {
 
             <div v-else-if="selectedDrive.noRounds === 1" class="card border-0 shadow-sm">
                 <div class="card-body">
-                    <h5 class="card-title fw-bold">Round 1: {{ selectedDrive.InterviewRounds[0] }}</h5>
+                    <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                        <h5 class="card-title fw-bold mb-0">Round 1: {{ selectedDrive.InterviewRounds[0] }}</h5>
+                        <button class="btn btn-danger btn-sm fw-bold shadow-sm" @click="closeRound(1)">
+                            <i class="bi bi-x-circle me-1"></i> Close / Complete Round 1
+                        </button>
+                    </div>
                     <p class="text-muted">Open to all shortlisted students.</p>
                     <interview-round-view 
                         :interviews="interviewsByRound[1]" 
@@ -239,7 +244,13 @@ const CompanyInterviews = {
                 <div class="tab-content pt-3">
                     <div v-for="(roundName, index) in selectedDrive.InterviewRounds" :key="index">
                         <div v-if="activeTab === (index + 1)" class="card card-body border-top-0">
-                            <h5 class="fw-bold">{{ getRoundHeading(index + 1) }}</h5>
+                            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                                <h5 class="fw-bold mb-0">Round {{ index + 1 }}: {{ roundName }}</h5>
+                                <button class="btn btn-danger btn-sm fw-bold shadow-sm" @click="closeRound(index + 1)">
+                                    <i class="bi bi-x-circle me-1"></i> Close / Complete Round {{ index + 1 }}
+                                </button>
+                            </div>
+                            <p class="text-muted small mb-3">{{ getRoundHeading(index + 1) }}</p>
                             <interview-round-view 
                                 :interviews="interviewsByRound[index + 1]" 
                                 :round-number="index + 1" 
@@ -278,7 +289,7 @@ const CompanyInterviews = {
                             <div class="card p-3 bg-light border">
                                 <h6 class="fw-bold">Schedule Round {{ selectedApplicationForUpdate.round_no + 1 }}: {{ getNextRoundName() }}</h6>
                                 <div class="row g-3">
-                                    <div class="col-md-6"><label class="form-label small">Date and Time</label><input type="datetime-local" v-model="nextInterviewData.datetime" class="form-control"></div>
+                                    <div class="col-md-6"><label class="form-label small">Date and Time</label><input type="datetime-local" v-model="nextInterviewData.datetime" :min="getMinDateTime()" class="form-control"></div>
                                     <div class="col-md-6"><label class="form-label small">Location / Meet Link</label><input type="text" v-model="nextInterviewData.location" class="form-control"></div>
                                     <div class="col-12"><label class="form-label small">Internal Notes</label><textarea v-model="nextInterviewData.remarks" class="form-control" rows="2"></textarea></div>
                                     <div class="col-12"><label class="form-label small">Notes for Student (Optional)</label><textarea v-model="nextInterviewData.student_facing_remarks" class="form-control" rows="2"></textarea></div>
@@ -315,12 +326,28 @@ const CompanyInterviews = {
                 <div class="modal-content">
                     <div class="modal-header"><h5 class="modal-title">Reject Application</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
                     <div class="modal-body">
-                        <div class="mb-3"><label class="form-label fw-bold">Rejection Reason (Mandatory)</label><textarea v-model="rejectionData.reason" class="form-control" rows="3"></textarea></div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Rejection Reason Category (Optional)</label>
+                            <select v-model="rejectionCategory" class="form-select mb-2">
+                                <option value="">Select standard category...</option>
+                                <option value="Lacks required technical skills">Lacks required technical skills</option>
+                                <option value="Does not meet CGPA criteria">Does not meet CGPA criteria</option>
+                                <option value="Resume mismatch / Incomplete application">Resume mismatch / Incomplete application</option>
+                                <option value="Failed live interviewing round steps">Failed live interviewing round steps</option>
+                                <option value="Candidate was unresponsive or no-show">Candidate was unresponsive or no-show</option>
+                                <option value="Position closed">Position closed</option>
+                                <option value="Other">Other (custom reason)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3" v-if="rejectionCategory === 'Other' || !rejectionCategory">
+                            <label class="form-label fw-bold">Custom Rejection Reason</label>
+                            <textarea v-model="rejectionData.reason" class="form-control" rows="3"></textarea>
+                        </div>
                         <div class="mb-3"><label class="form-label">Note for Student (Optional)</label><textarea v-model="rejectionData.note" class="form-control" rows="2"></textarea></div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="button" class="btn btn-danger" @click="confirmRejectApplication" :disabled="!rejectionData.reason">Confirm Rejection</button>
+                        <button type="button" class="btn btn-danger" @click="confirmRejectApplication" :disabled="!rejectionCategory ? !rejectionData.reason : (rejectionCategory === 'Other' && !rejectionData.reason)">Confirm Rejection</button>
                     </div>
                 </div>
             </div>
@@ -341,7 +368,7 @@ const CompanyInterviews = {
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-bold small">New Date & Time (Leave blank if cancelling)</label>
-                            <input type="datetime-local" class="form-control" v-model="rescheduleData.datetime">
+                            <input type="datetime-local" class="form-control" v-model="rescheduleData.datetime" :min="getMinDateTime()">
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-bold small">Reason (Mandatory)</label>
@@ -391,6 +418,7 @@ const CompanyInterviews = {
             rescheduleModal: null,
             rescheduleData: { datetime: '', reason: '' },
             rejectionReasonModal: null,
+            rejectionCategory: '',
             nextInterviewData: {
                 datetime: '',
                 location: '',
@@ -493,6 +521,7 @@ const CompanyInterviews = {
             this.updateStatusModal.show();
         },
         openRejectionModal() {
+            this.rejectionCategory = '';
             this.rejectionData = { reason: '', note: '' };
             this.updateStatusModal.hide();
             this.rejectionReasonModal.show();
@@ -505,6 +534,9 @@ const CompanyInterviews = {
         async submitInterviewUpdate(action) {
             if (!this.rescheduleData.reason.trim()) return alert("Reason is mandatory.");
             if (action === 'reschedule' && !this.rescheduleData.datetime) return alert("New datetime is required to reschedule.");
+            if (action === 'reschedule' && new Date(this.rescheduleData.datetime) <= new Date()) {
+                return alert("Rescheduled interview time must be in the future.");
+            }
             
             const payload = { action: action, reason: this.rescheduleData.reason.trim() };
             if (action === 'reschedule') {
@@ -528,11 +560,16 @@ const CompanyInterviews = {
             }
         },
         async confirmRejectApplication() {
-            if (!this.rejectionData.reason) return alert('Rejection reason is mandatory.');
+            const finalReason = this.rejectionCategory === 'Other' || !this.rejectionCategory
+                ? this.rejectionData.reason
+                : this.rejectionCategory;
+
+            if (!finalReason) return alert('Rejection reason is mandatory.');
+
             const res = await fetch(`/api/view_application/${this.selectedApplicationForUpdate.application_id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'Authentication-Token': localStorage.getItem('token') },
-                body: JSON.stringify({ status: 'Rejected', rejection_reason: this.rejectionData.reason, note_for_student: this.rejectionData.note })
+                body: JSON.stringify({ status: 'Rejected', rejection_reason: finalReason, note_for_student: this.rejectionData.note })
             });
             if (res.ok) {
                 alert('Application has been rejected.');
@@ -543,12 +580,39 @@ const CompanyInterviews = {
                 alert(`Failed to reject application: ${err.message}`);
             }
         },
+        async closeRound(roundNo) {
+            const confirmed = confirm(`Are you sure you want to close Round ${roundNo}? This will bulk-reject all candidates who have uncompleted interviews in this round.`);
+            if (!confirmed) return;
+
+            try {
+                const res = await fetch(`/api/close_round/${this.selectedDriveId}/${roundNo}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authentication-Token': localStorage.getItem('token')
+                    }
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    alert(data.message || 'Round closed successfully.');
+                    this.fetchInterviews();
+                } else {
+                    alert(data.message || 'Failed to close round.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('An error occurred while closing the round.');
+            }
+        },
         async scheduleNextRound(force = false) {
             if (!this.selectedApplicationForUpdate || !this.selectedApplicationForUpdate.application_id) {
                 return alert('Error: No application selected.');
             }
             if (!this.nextInterviewData.datetime || !this.nextInterviewData.location) {
                 return alert('Date, Time, and Location are required.');
+            }
+            if (new Date(this.nextInterviewData.datetime) <= new Date()) {
+                return alert("Interview round time must be in the future.");
             }
 
             const formattedDateTime = new Date(this.nextInterviewData.datetime).toISOString();
@@ -619,7 +683,8 @@ const CompanyInterviews = {
             this.selectedStudentId = userId;
             this.selectedApplicationResume = resume;
             this.quickProfileModal.show();
-        }
+        },
+        getMinDateTime
     },
     watch: {
         selectedDriveId() { this.activeTab = 1; },

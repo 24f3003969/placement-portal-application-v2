@@ -40,7 +40,7 @@ const SignUp={
                     <div class="form-check mb-4">
                         <input class="form-check-input" type="checkbox" id="terms" v-model="agreeTerms" required/>
                         <label class="form-check-label text-muted small" for="terms" style="cursor: pointer; user-select: none; line-height: 1.4;">
-                            I agree to abide by the university placement cell guidelines, code of conduct, and academic integrity policies throughout the recruitment process.
+                            I agree to abide by the university placement cell guidelines, code of conduct, and <router-link to="/privacy_policy">privacy policy</router-link> throughout the recruitment process.
                         </label>
                     </div>
                     <button type="submit" class="btn btn-primary w-100" :disabled="isLoading">

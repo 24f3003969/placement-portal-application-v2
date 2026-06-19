@@ -1,4 +1,4 @@
-import { formatDateTime } from '../utils/formatDateTime.js';
+import { formatDateTime, getMinDate, getMinDateTime } from '../utils/formatDateTime.js';
 import StudentProfile from '../components/student_profile.js';
 
 const GettedApplications = {
@@ -6,7 +6,7 @@ const GettedApplications = {
     <div>
         <div>
             <!-- Global Utilities Filtering Row -->
-            <div class="row align-items-center g-3 p-3 bg-white border-bottom shadow-sm mb-3 rounded">
+            <div class="row align-items-center g-3 p-3 bg-white border-bottom shadow-sm rounded">
                 <div class="col-md-12">
                     <div class="d-flex flex-wrap align-items-center gap-3">
                         <div class="dropdown">
@@ -16,7 +16,7 @@ const GettedApplications = {
                             <div class="dropdown-menu p-3 shadow" style="min-width: 290px;">
                                 <div class="mb-2.5">
                                     <label class="form-label small fw-bold text-primary mb-1">Placement Drive</label>
-                                    <select class="form-select form-select-sm" v-model="selectedDriveId" @change="fetchApplications" :disabled="driveLocked" style="max-height: 150px; overflow-y: auto;">
+                                    <select class="form-select form-select-sm" v-model="selectedDriveId" @change="fetchApplications"  style="max-height: 150px; overflow-y: auto;">
                                         <option value="">All Active Drives (Global Pool)</option>
                                         <option v-for="drive in placementDrivesList" :key="drive.DriveID" :value="drive.DriveID">
                                             (#{{drive.DriveID}}) {{ drive.JobTitle }} - {{ drive.CompanyName }}
@@ -70,6 +70,9 @@ const GettedApplications = {
                                 </div>
                             </div>
                         </div>
+                        <button v-if="selectedDriveId" class="btn btn-outline-danger btn-sm fw-bold shadow-sm" @click="rejectAllIneligibleForDrive">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i> Reject Ineligible Candidates
+                        </button>
 
                         <!-- Main Live Substring Query Search Engine -->
                         <div class="flex-grow-1">
@@ -150,12 +153,12 @@ const GettedApplications = {
                     </div>
 
                     <!-- TAB 1: SCREENING ROOM CONTAINER -->
-                    <div v-if="activeStatus === 'Pending'" class="table-responsive table-scroll-md bg-white rounded border p-2 shadow-sm text-start">
+                    <div v-if="activeStatus === 'Pending'" class="table-responsive table-scroll-md bg-white rounded border shadow-sm text-start">
                         <div v-if="groupedApplications.pendingApplications.length === 0">
                             <h5 class="fw-bold mb-0 text-center py-3 text-muted">No Incoming Profiles In Screening Roster</h5>
                         </div>
                         <div v-else>
-                            <h5 class="fw-bold mb-2 text-dark border-bottom pb-1 small"><i class="bi bi-door-open me-2 text-primary"></i>Pending Review</h5>
+                            <h5 class="fw-bold mb-0 text-dark border-bottom pb-0 small"><i class="bi bi-door-open me-2 text-primary"></i>Pending Review</h5>
                             <table class="table table-sm table-hover align-middle mb-0 small">
                                 <thead class="table-light text-secondary">
                                     <tr>
@@ -181,6 +184,7 @@ const GettedApplications = {
                                                         </span>
                                                     </div>
                                                     <small class="text-muted font-monospace">{{ app.student.roll_no }} | CGPA: <strong class="text-primary">{{app.student.cgpa}}</strong></small>
+                                                    <span v-if="app.is_currently_eligible === false" class="badge bg-danger text-white ms-1" :title="app.eligibility_issues ? app.eligibility_issues.join(', ') : 'Profile ineligible'">⚠️ Ineligible</span>
                                                 </div>
                                             </div>
                                         </td>
@@ -204,12 +208,38 @@ const GettedApplications = {
                     </div>
 
                     <!-- TAB 2: ACTIVE EVALUATION GAUNTLET -->
-                    <div v-if="activeStatus === 'Shortlisted'" class="table-responsive table-scroll-md bg-white rounded border p-2 shadow-sm text-start">
+                    <div v-if="activeStatus === 'Shortlisted'" class="table-responsive table-scroll-md bg-white rounded border shadow-sm text-start">
                         <div v-if="!groupedApplications.awaitingSchedule.length && !groupedApplications.interviewing.length">
                             <h5 class="fw-bold mb-0 text-center py-3 text-muted">No Candidates In Pipeline</h5>
                         </div>
                         <div v-else>
-                            <h5 class="fw-bold mb-2 text-dark border-bottom pb-1 small"><i class="bi bi-cpu-fill me-2 text-primary"></i>Interview Pipeline</h5>
+                            <div class="px-3 pt-3 pb-2 d-flex justify-content-between align-items-center border-bottom mb-0 bg-light-subtle rounded-top">
+                                <h5 class="fw-bold mb-0 text-dark small"><i class="bi bi-cpu-fill me-2 text-primary"></i>Interview Pipeline</h5>
+                                <!-- Filter Toggle Button Group -->
+                                <div class="btn-group shadow-sm bg-white p-1 border rounded-pill" role="group" aria-label="Shortlisted candidate filter" style="max-height: 32px;">
+                                    <button type="button" 
+                                            class="btn btn-xs rounded-pill fw-bold px-3 transition-all text-nowrap d-flex align-items-center" 
+                                            :class="shortlistedFilter === 'all' ? 'btn-primary text-white' : 'btn-light text-secondary'"
+                                            @click="shortlistedFilter = 'all'"
+                                            style="font-size: 0.7rem; border: none; padding: 2px 12px;">
+                                        All ({{ groupedApplications.awaitingSchedule.length + groupedApplications.interviewing.length }})
+                                    </button>
+                                    <button type="button" 
+                                            class="btn btn-xs rounded-pill fw-bold px-3 transition-all text-nowrap d-flex align-items-center ms-1" 
+                                            :class="shortlistedFilter === 'awaiting' ? 'btn-primary text-white' : 'btn-light text-secondary'"
+                                            @click="shortlistedFilter = 'awaiting'"
+                                            style="font-size: 0.7rem; border: none; padding: 2px 12px;">
+                                        Awaiting Scheduling ({{ groupedApplications.awaitingSchedule.length }})
+                                    </button>
+                                    <button type="button" 
+                                            class="btn btn-xs rounded-pill fw-bold px-3 transition-all text-nowrap d-flex align-items-center ms-1" 
+                                            :class="shortlistedFilter === 'interviewing' ? 'btn-primary text-white' : 'btn-light text-secondary'"
+                                            @click="shortlistedFilter = 'interviewing'"
+                                            style="font-size: 0.7rem; border: none; padding: 2px 12px;">
+                                        Interviewing ({{ groupedApplications.interviewing.length }})
+                                    </button>
+                                </div>
+                            </div>
                             <table class="table table-sm table-hover align-middle mb-0 small">
                                 <thead class="table-light text-secondary">
                                     <tr>
@@ -220,6 +250,12 @@ const GettedApplications = {
                                     </tr>
                                 </thead>
                                 <tbody>
+                                    <tr v-if="filteredShortlisted.length === 0">
+                                        <td colspan="4" class="text-center py-4 text-muted">
+                                            <i class="bi bi-inbox fs-4 d-block mb-1 opacity-50"></i>
+                                            No candidates in this pipeline segment.
+                                        </td>
+                                    </tr>
                                     <tr v-for="app in filteredShortlisted" :key="app.id" style="max-height: 120px; overflow-y: auto;">
                                         <td>
                                             <div class="d-flex align-items-center gap-2">
@@ -234,6 +270,7 @@ const GettedApplications = {
                                                         </span>
                                                     </div>
                                                     <small class="text-muted font-monospace">{{ app.student.roll_no }} | CGPA: <strong class="text-primary">{{app.student.cgpa}}</strong></small>
+                                                    <span v-if="app.is_currently_eligible === false" class="badge bg-danger text-white ms-1" :title="app.eligibility_issues ? app.eligibility_issues.join(', ') : 'Profile ineligible'">⚠️ Ineligible</span>
                                                 </div>
                                             </div>
                                         </td>
@@ -272,7 +309,7 @@ const GettedApplications = {
                     </div>
 
                     <!-- TAB 3: SELECTED CANDIDATES -->
-                    <div v-if="activeStatus === 'Selected'" class="table-responsive table-scroll-md bg-white rounded border p-2 shadow-sm text-start">
+                    <div v-if="activeStatus === 'Selected'" class="table-responsive table-scroll-md bg-white rounded border shadow-sm text-start">
                         <div v-if="groupedApplications.selectedCandidates.length === 0">
                             <h5 class="fw-bold mb-0 text-center py-3 text-muted">No Candidates Selected Yet</h5>
                         </div>
@@ -309,14 +346,20 @@ const GettedApplications = {
                                         <td>
                                             <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0.5"><i class="bi bi-award me-1"></i>Selected (Offer Phase)</span>
                                             <small class="d-block text-muted mt-1" style="font-size: 0.7rem;">Selected on: {{ formatDateTime(app.selected_date || app.application_date, false) }}</small>
+                                            <div v-if="app.offer_sent" class="mt-1.5 pt-1.5 border-top border-light-subtle">
+                                                <small class="d-block text-muted" style="font-size: 0.68rem;">
+                                                    <i class="bi bi-send-fill text-secondary me-1"></i>Sent: {{ formatDateTime(app.offer_sent_date, true) }}
+                                                </small>
+                                                <small class="d-block text-muted mt-0.5" style="font-size: 0.68rem;">
+                                                    <i class="bi bi-calendar-event-fill text-secondary me-1"></i>Expires: {{ formatDateTime(app.offer_expiry_date, false) }}
+                                                </small>
+                                            </div>
                                         </td>
                                         <td class="text-center align-middle" style="width: 200px;">
-                                            <!-- High Visibility Alert Badge -->
                                             <div v-if="!app.offer_sent" class="text-warning-emphasis small fw-bold mb-1 animate-pulse bg-warning-subtle rounded py-0.5 border border-warning-subtle">
                                                 <i class="bi bi-envelope-exclamation-fill me-1"></i>Offer waiting to send!
                                             </div>
-                                            
-                                            <!-- Action Buttons -->
+                                
                                             <button v-if="!app.offer_sent" @click="openSendOfferModal(app)" class="btn btn-success btn-sm px-2 py-0.5 w-100 fw-bold shadow-sm" style="font-size: 0.75rem;"><i class="bi bi-send-plus me-1"></i>Generate Offer</button>
                                             <div v-else>
                                                 <a :href="'/' + app.offer_letter" target="_blank" class="btn btn-sm btn-outline-success px-2 py-0.5 w-100 fw-bold mb-1" style="font-size: 0.75rem;"><i class="bi bi-filetype-pdf me-1"></i> View Sent Letter</a>
@@ -330,7 +373,7 @@ const GettedApplications = {
                     </div>
 
                     <!-- TAB 4: HIRED BOARD -->
-                    <div v-if="activeStatus === 'Hired'" class="table-responsive table-scroll-md bg-white rounded border p-2 shadow-sm text-start">
+                    <div v-if="activeStatus === 'Hired'" class="table-responsive table-scroll-md bg-white rounded border shadow-sm text-start">
                         <!-- Content logic identically structured with profile avatar gap layouts... -->
                         <div v-if="groupedApplications.hiredCandidates.length === 0">
                             <h5 class="fw-bold mb-0 text-center py-3 text-muted">No Candidates Hired Yet</h5>
@@ -363,7 +406,7 @@ const GettedApplications = {
                                             <small class="d-block text-muted mt-1" style="font-size: 0.7rem;">Joining: {{ formatDateTime(app.joining_date, false) }}</small>
                                         </td>
                                         <td class="text-center">
-                                            <a v-if="app.offer_letter" :href="'/' + app.offer_letter" target="_blank" class="btn btn-outline-dark btn-sm py-0.5 fw-bold" style="font-size: 0.75rem;"><i class="bi bi-file-earmark-lock-fill text-danger me-1"></i> Vault PDF</a>
+                                            <a v-if="app.offer_letter" :href="'/' + app.offer_letter" target="_blank" class="btn btn-outline-dark btn-sm py-0.5 fw-bold" style="font-size: 0.75rem;"><i class="bi bi-file-earmark-lock-fill text-danger me-1"></i> View Offer Letter</a>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -372,7 +415,7 @@ const GettedApplications = {
                     </div>
 
                     <!-- TAB 5: REJECTED POOL -->
-                    <div v-if="activeStatus === 'Rejected'" class="table-responsive table-scroll-md bg-white rounded border p-2 shadow-sm text-start">
+                    <div v-if="activeStatus === 'Rejected'" class="table-responsive table-scroll-md bg-white rounded border shadow-sm text-start">
                         <div v-if="groupedApplications.rejectedApplications.length === 0">
                             <h5 class="fw-bold mb-0 text-center py-3 text-muted">No Rejected Candidates</h5>
                         </div>
@@ -440,7 +483,7 @@ const GettedApplications = {
                         <button class="btn btn-secondary px-4 btn-sm" data-bs-dismiss="modal">Close Workspace</button>
                         
                         <template v-if="selectedApplication.status === 'Pending'">
-                            <button class="btn btn-danger px-4 btn-sm fw-bold" @click="openRejectionModalFromDetails">Reject Roster Placement</button>
+                            <button class="btn btn-danger px-4 btn-sm fw-bold" @click="openRejectionModalFromDetails">Reject Candidate</button>
                             <button class="btn btn-success px-4 btn-sm fw-bold" @click="shortlistApplication(selectedApplication.id)">Shortlist Candidate</button>
                         </template>
 
@@ -454,7 +497,7 @@ const GettedApplications = {
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold">Interview Timestamp Allocation</label>
-                                    <input type="datetime-local" v-model="interview.datetime" class="form-control form-control-sm">
+                                    <input type="datetime-local" v-model="interview.datetime" :min="getMinDateTime()" class="form-control form-control-sm">
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold">Location Vector (or Virtual Link URL)</label>
@@ -477,18 +520,31 @@ const GettedApplications = {
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content border-0 shadow-lg">
                     <div class="modal-header bg-danger text-white border-0">
-                        <h5 class="modal-title fw-bold"><i class="bi bi-slash-circle me-2"></i>Terminate Roster Operations</h5>
+                        <h5 class="modal-title fw-bold"><i class="bi bi-slash-circle me-2"></i>Reject Candidate</h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body p-3 text-start">
                         <div class="mb-3">
-                            <label class="form-label fw-bold small text-muted">Mandatory Rejection Reason</label>
-                            <textarea v-model="rejectionData.reason" class="form-control font-monospace" rows="3" placeholder="e.g. Failed to cross technical evaluation..."></textarea>
+                            <label class="form-label fw-bold small text-muted">Rejection Reason Category (Optional)</label>
+                            <select v-model="rejectionCategory" class="form-select mb-2">
+                                <option value="">Select standard category...</option>
+                                <option value="Lacks required technical skills">Lacks required technical skills</option>
+                                <option value="Does not meet CGPA criteria">Does not meet CGPA criteria</option>
+                                <option value="Resume mismatch / Incomplete application">Resume mismatch / Incomplete application</option>
+                                <option value="Failed live interviewing round steps">Failed live interviewing round steps</option>
+                                <option value="Candidate was unresponsive or no-show">Candidate was unresponsive or no-show</option>
+                                <option value="Position closed">Position closed</option>
+                                <option value="Other">Other (custom reason)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3" v-if="rejectionCategory === 'Other' || !rejectionCategory">
+                            <label class="form-label fw-bold small text-muted">Custom Rejection Reason</label>
+                            <textarea v-model="rejectionData.reason" class="form-control font-monospace" rows="3" placeholder="Enter custom reason details... (Optional)"></textarea>
                         </div>
                     </div>
                     <div class="modal-footer bg-light border-0">
                         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Dismiss</button>
-                        <button type="button" class="btn btn-danger btn-sm px-3 fw-bold" @click="confirmRejectApplication" :disabled="!rejectionData.reason.trim()">Commit Eviction Drop</button>
+                        <button type="button" class="btn btn-danger btn-sm px-3 fw-bold" @click="confirmRejectApplication">Confirm Reject</button>
                     </div>
                 </div>
             </div>
@@ -507,11 +563,11 @@ const GettedApplications = {
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label fw-bold small">Offer Acceptance System Expiry Date</label>
-                                <input type="date" v-model="offerData.expiry_date" class="form-control form-control-sm" required>
+                                <input type="date" v-model="offerData.expiry_date" :min="getMinDate()" class="form-control form-control-sm" required>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-bold small">Anticipated Onboarding Joining Date</label>
-                                <input type="date" v-model="offerData.joining_date" class="form-control form-control-sm" required>
+                                <input type="date" v-model="offerData.joining_date" :min="getMinDate()" class="form-control form-control-sm" required>
                             </div>
                             <div class="col-12">
                                 <label class="form-label fw-bold small">Optional Offer Message / Notes</label>
@@ -602,6 +658,7 @@ const GettedApplications = {
             filterAvailability: 'all', 
             restoreAuditReason: '',    
             interview: { datetime: '', location: '' },
+            rejectionCategory: '',
             rejectionData: { reason: '', note: '' },
             offerData: { expiry_date: '', joining_date: '', message: '' },
             offerGenerationLoading: false,
@@ -707,6 +764,7 @@ const GettedApplications = {
                             break;
                         case 'Shortlisted':
                         case 'Interview': 
+                        case 'Interviewing':
                             if (app.interview_datetime === 'N/A' || !app.interview_datetime) {
                                 groups.awaitingSchedule.push(app);
                             } else {
@@ -916,6 +974,11 @@ const GettedApplications = {
             const targetAppId = this.selectedApplication.application_id || this.selectedApplication.id;
             if (!targetAppId) return;
 
+            if (new Date(this.interview.datetime) <= new Date()) {
+                alert('Interview date and time must be set to a future date and time.');
+                return;
+            }
+
             try {
                 const res = await fetch(`/api/view_application/${targetAppId}`,{
                     method:'POST',
@@ -944,21 +1007,26 @@ const GettedApplications = {
         },
         openRejectionModalDirect(app) {
             this.selectedApplicationForUpdate = app;
+            this.rejectionCategory = '';
             this.rejectionData = { reason: '', note: '' };
             this.rejectionReasonModal.show();
         },
         openRejectionModalFromDetails() {
             if (!this.selectedApplication) return;
             this.selectedApplicationForUpdate = this.selectedApplication;
+            this.rejectionCategory = '';
             this.rejectionData = { reason: '', note: '' };
             this.applicationDetailModal.hide();
             this.rejectionReasonModal.show();
         },
         async confirmRejectApplication() {
-            if (!this.selectedApplicationForUpdate || !this.rejectionData.reason.trim()) {
-                alert('A clear audit trail rejection reason is mandatory.');
+            if (!this.selectedApplicationForUpdate) {
                 return;
             }
+            const finalReason = this.rejectionCategory === 'Other' || !this.rejectionCategory
+                ? this.rejectionData.reason
+                : this.rejectionCategory;
+
             const res = await fetch(`/api/view_application/${this.selectedApplicationForUpdate.id}`, {
                 method: 'PUT',
                 headers: {
@@ -967,7 +1035,7 @@ const GettedApplications = {
                 },
                 body: JSON.stringify({
                     status: 'Rejected',
-                    rejection_reason: this.rejectionData.reason,
+                    rejection_reason: finalReason || 'No reason provided.',
                     note_for_student: this.rejectionData.note
                 })
             });
@@ -975,6 +1043,31 @@ const GettedApplications = {
             if (res.ok) {
                 this.rejectionReasonModal.hide();
                 this.fetchApplications(); 
+            }
+        },
+        async rejectAllIneligibleForDrive() {
+            if (!this.selectedDriveId) return;
+            const confirmed = confirm("Are you sure you want to reject all candidates in this drive whose profiles no longer meet eligibility criteria? This will automatically cancel their interviews and send emails.");
+            if (!confirmed) return;
+
+            try {
+                const res = await fetch(`/api/reject_ineligible_applications/${this.selectedDriveId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authentication-Token': localStorage.getItem('token'),
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    alert(data.message || 'Ineligible candidates rejected successfully.');
+                    this.fetchApplications();
+                } else {
+                    alert(data.message || 'Failed to reject ineligible candidates.');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('An error occurred while rejecting ineligible candidates.');
             }
         },
         openSendOfferModal(app) {
@@ -1076,10 +1169,20 @@ const GettedApplications = {
             this.extendOfferModal.show();
         },
         getMinExtendExpiryDate() {
+            if (this.selectedApplicationForOffer && this.selectedApplicationForOffer.offer_expiry_date) {
+                const currentExpiry = new Date(this.selectedApplicationForOffer.offer_expiry_date);
+                currentExpiry.setDate(currentExpiry.getDate() + 1);
+                const yyyy = currentExpiry.getFullYear();
+                const mm = String(currentExpiry.getMonth() + 1).padStart(2, '0');
+                const dd = String(currentExpiry.getDate()).padStart(2, '0');
+                return `${yyyy}-${mm}-${dd}`;
+            }
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
             return tomorrow.toISOString().split('T')[0];
         },
+        getMinDate,
+        getMinDateTime,
         async submitExtendOffer() {
             if (!this.extendOfferData.new_expiry_date) return;
             const chosenDate = new Date(this.extendOfferData.new_expiry_date);
@@ -1090,6 +1193,15 @@ const GettedApplications = {
             if (chosenDate <= today) {
                 alert('The extended expiry date must be in the future.');
                 return;
+            }
+
+            if (this.selectedApplicationForOffer && this.selectedApplicationForOffer.offer_expiry_date) {
+                const currentExpiry = new Date(this.selectedApplicationForOffer.offer_expiry_date);
+                currentExpiry.setHours(0,0,0,0);
+                if (chosenDate <= currentExpiry) {
+                    alert('The extended expiry date must be after the current expiry date.');
+                    return;
+                }
             }
             
             this.extendOfferLoading = true;

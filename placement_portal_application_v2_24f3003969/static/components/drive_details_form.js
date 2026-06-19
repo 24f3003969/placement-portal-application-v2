@@ -1,4 +1,5 @@
 import DriveDetailView from './drive_details_view.js';
+import { getMinDate } from '../utils/formatDateTime.js';
 
 const DriveDetailsForm = {
     props: {
@@ -41,7 +42,7 @@ const DriveDetailsForm = {
 
                 <div class="row g-4 mb-4">
                     <div class="col-md-7">
-                        <div class="p-4 border rounded-4 h-100 bg-white shadow-sm">
+                        <div class="p-4 border rounded-4 h-100 bg-light shadow-sm">
                             <h6 class="fw-bold mb-4 text-secondary border-bottom pb-2">Basic Information</h6>
                             <div class="mb-4">
                                 <label class="form-label small fw-bold">Job Title / Role</label>
@@ -70,30 +71,30 @@ const DriveDetailsForm = {
                     </div>
                     
                     <div class="col-md-5">
-                        <div class="p-4 border rounded-4 h-100 bg-white shadow-sm">
+                        <div v-if="mode !== 'template'" class="p-4 border rounded-4 h-100 bg-light shadow-sm">
                             <h6 class="fw-bold mb-4 text-secondary border-bottom pb-2">Compensation & Timeline</h6>
-                            <div class="mb-4" v-if="mode !== 'template'">
+                            <div class="mb-4">
                                 <label class="form-label small fw-bold">Apply Deadline</label>
-                                <input v-model="form.ApplyDeadline" type="datetime-local" class="form-control" required>
+                                <input v-model="form.ApplyDeadline" type="date" :min="getMinDate()" class="form-control" required>
                             </div>
                             <div class="mb-4" v-if="driveType === 'Internship' && mode !== 'template'">
                                 <label class="form-label small fw-bold">Duration (in months)</label>
                                 <input v-model="form.Duration" type="number" min="1" class="form-control" placeholder="e.g. 6" required>
                             </div>
-                            <div class="mb-4" v-if="mode !== 'template'">
+                            <div class="mb-4">
                                 <label class="form-label small fw-bold">{{ driveType === 'Job' ? 'Annual CTC (LPA)' : 'Monthly Stipend' }}</label>
                                 <div class="input-group">
                                     <span class="input-group-text bg-light border-end-0 text-secondary">₹</span>
-                                    <input v-model="form.Salary" type="number" step="0.01" class="form-control border-start-0" placeholder="e.g. 12.5" required>
+                                    <input v-model="form.Salary" type="number" step="0.01" class="form-control border-start-0" :placeholder="driveType === 'Job' ? 'e.g. 12.5' : 'e.g. 10000'" required>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="row g-4 mb-4">
+                <div class="row g-4 mb-2">
                     <div class="col-md-12">
-                        <div class="p-4 border rounded-4 bg-white shadow-sm">
+                        <div class="p-4 border rounded-4 bg-light shadow-sm">
                             <h6 class="fw-bold mb-3 text-secondary border-bottom pb-2 required-label">Job Description</h6>
                             <div class="bg-white">
                                 <quill-editor 
@@ -107,7 +108,7 @@ const DriveDetailsForm = {
 
                 <div class="row g-4 mb-4">
                     <div class="col-md-6">
-                        <div class="p-4 border rounded-4 h-100 bg-white shadow-sm">
+                        <div class="p-4 border rounded-4 h-100 bg-light shadow-sm">
                             <h6 class="fw-bold mb-4 text-secondary border-bottom pb-2">Candidate Requirements</h6>
                             <div class="mb-4">
                                 <label class="form-label small fw-bold">Minimum CGPA (Optional)</label>
@@ -129,7 +130,7 @@ const DriveDetailsForm = {
                     </div>
                     
                     <div class="col-md-6">
-                        <div class="p-4 border rounded-4 h-100 d-flex flex-column bg-white shadow-sm">
+                        <div class="p-4 border rounded-4 h-100 d-flex flex-column bg-light shadow-sm">
                             <h6 class="fw-bold mb-4 text-secondary border-bottom pb-2">Required Skills</h6>
                             <label class="form-label small text-muted mb-3">Type a skill and press Enter to add. Candidates missing these will be filtered out.</label>
                             
@@ -145,7 +146,7 @@ const DriveDetailsForm = {
 
                 <div class="row g-4 mb-4">
                     <div class="col-md-12">
-                        <div class="p-4 border rounded-4 bg-white shadow-sm">
+                        <div class="p-4 border rounded-4 bg-light shadow-sm">
                             <h6 class="fw-bold mb-4 text-secondary border-bottom pb-2">Interview Process</h6>
                             <div class="row g-4 align-items-start">
                                 <div class="col-md-3">
@@ -154,6 +155,7 @@ const DriveDetailsForm = {
                                         <option value="1">1 Round</option>
                                         <option value="2">2 Rounds</option>
                                         <option value="3">3 Rounds</option>
+                                        <option value="4">4 Rounds</option>
                                     </select>
                                 </div>
                                 <div class="col-md-9">
@@ -181,7 +183,7 @@ const DriveDetailsForm = {
 
                 <div class="d-flex justify-content-end gap-3 mt-5 pt-4 border-top">
                     <button type="button" class="btn btn-light border px-4 py-2 fw-medium rounded-pill" @click="$emit('cancel')">Cancel</button>
-                    <button type="submit" class="btn btn-primary px-5 py-2 fw-bold shadow-sm rounded-pill">Review & Preview <i class="bi bi-arrow-right ms-2"></i></button>
+                    <button type="submit" class="btn btn-primary px-5 py-2 fw-bold shadow-sm rounded-pill">{{ mode !== 'template' ? 'Review & Preview' : 'Save Template' }}<i class="bi bi-arrow-right ms-2"></i></button>
                 </div>
             </form>
         </div>
@@ -271,7 +273,7 @@ const DriveDetailsForm = {
             let formattedDeadline = this.form.ApplyDeadline;
             if (this.form.ApplyDeadline) {
                 try {
-                    formattedDeadline = new Date(this.form.ApplyDeadline).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+                    formattedDeadline = new Date(this.form.ApplyDeadline).toLocaleString('en-IN', { dateStyle: 'medium' });
                 } catch(e) { }
             }
 
@@ -305,7 +307,7 @@ const DriveDetailsForm = {
             const res = await fetch(`/api/drive_templates/${templateId}`, { headers: { 'Authentication-Token': localStorage.getItem('token') } });
             if (res.ok) {
                 const templateData = await res.json();
-                const { id, TemplateName, ...formData } = templateData;
+                const { id, TemplateName, Type, ...formData } = templateData; // Exclude Type to preserve the selected Job/Internship type
 
                 if (Array.isArray(formData.InterviewRounds)) {
                     formData.InterviewRounds = formData.InterviewRounds.join(', ');
@@ -322,7 +324,17 @@ const DriveDetailsForm = {
             }
             this.skillInput = '';
         },
+        getMinDate,
         submitForm() {
+            if (this.mode !== 'template' && this.form.ApplyDeadline) {
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                const selectedDate = new Date(this.form.ApplyDeadline + 'T00:00:00');
+                if (selectedDate < today) {
+                    alert("Apply deadline must be today or in the future.");
+                    return;
+                }
+            }
             const numRounds = parseInt(this.form.noRounds, 10) || 0;
             let roundsList = [];
             if (typeof this.form.InterviewRounds === 'string' && this.form.InterviewRounds.trim()) {
@@ -343,6 +355,15 @@ const DriveDetailsForm = {
             }
         },
         async finalSubmit() {
+            if (this.mode !== 'template' && this.form.ApplyDeadline) {
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                const selectedDate = new Date(this.form.ApplyDeadline + 'T00:00:00');
+                if (selectedDate < today) {
+                    alert("Apply deadline must be today or in the future.");
+                    return;
+                }
+            }
             this.loading = true;
             const numRounds = parseInt(this.form.noRounds, 10) || 0;
             const roundsList = (typeof this.form.InterviewRounds === 'string' && this.form.InterviewRounds.trim())
@@ -408,7 +429,7 @@ const DriveDetailsForm = {
             const year = today.getFullYear();
             const month = String(today.getMonth() + 1).padStart(2, '0');
             const day = String(today.getDate()).padStart(2, '0');
-            this.form.ApplyDeadline = `${year}-${month}-${day}T10:00`;
+            this.form.ApplyDeadline = `${year}-${month}-${day}`;
         }
         if(this.mode === 'student' || this.mode === 'admin'){
             this.isPreview = true;
@@ -424,7 +445,7 @@ const DriveDetailsForm = {
         if (!document.getElementById('quill-custom-height-override')) {
             const style = document.createElement('style');
             style.id = 'quill-custom-height-override';
-            style.innerHTML = '.ql-container { min-height: 200px; max-height: 350px; overflow-y: auto; }';
+            style.innerHTML = '.ql-container { max-height: 350px; } .ql-editor { min-height: 200px; }';
             document.head.appendChild(style);
         }
     }

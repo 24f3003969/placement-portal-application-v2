@@ -51,13 +51,13 @@ const StudentResource = {
                     </div>
 
                     <div v-if="currentUserRole === 'stud' && drive.Status !== 'Rejected'" class="d-flex align-items-center gap-2">
-                        <span v-if="drive.Status === 'Closed' || isDeadlinePassed(drive.ApplyDeadline)" class="badge bg-danger">Application Closed</span>
+                        <span v-if="drive.Status === 'Application Closed' || isDeadlinePassed(drive.ApplyDeadline)" class="badge bg-danger">Application Closed</span>
                         <span v-else-if="!eligibilityStatus.eligible" class="badge bg-danger" :title="eligibilityStatus.reason">Not Eligible</span>
                         
                         <button v-if="hasApplied" class="btn btn-warning btn-sm px-3 rounded-pill" disabled>
                             Applied
                         </button>
-                        <button v-else-if="eligibilityStatus.eligible && drive.Status !== 'Closed' && !isDeadlinePassed(drive.ApplyDeadline)" @click="$emit('apply', drive.DriveID)" class="btn btn-primary btn-sm px-3 rounded-pill" style="background-color: #003366; border: none;">
+                        <button v-else-if="eligibilityStatus.eligible && drive.Status !== 'Application Closed' && !isDeadlinePassed(drive.ApplyDeadline)" @click="$emit('apply', drive.DriveID)" class="btn btn-primary btn-sm px-3 rounded-pill" style="background-color: #003366; border: none;">
                             Apply Now
                         </button>
                         <button v-else @click="$emit('apply', drive.DriveID)" class="btn btn-outline-secondary btn-sm px-3 rounded-pill bg-white">
@@ -72,16 +72,15 @@ const StudentResource = {
                     </div>
                     <div v-else-if="currentUserRole === 'comp'">
                         <button @click="$emit('view', drive)" class="btn btn-outline-primary btn-sm">View</button>
-                        <button v-if="drive.Status === 'Active' || drive.Status === 'Approved'" @click="$emit('close', drive.DriveID)" class="btn btn-outline-danger btn-sm ms-2">Close</button>
+                        <button v-if="drive.Status === 'Active'" @click="$emit('close', drive.DriveID)" class="btn btn-outline-danger btn-sm ms-2">Close</button>
                     </div>
 
-                    <div v-if="currentUserRole === 'admin' && drive.Status === 'Rejected'">
-                        <button @click="$emit('viewNote', drive.Remark)" class="btn btn-outline-warning btn-sm">View Remark</button>
-                        <button @click="$emit('view', drive)" class="btn btn-outline-info btn-sm ms-2">View</button>
-                    </div>
-                    <div v-else-if="currentUserRole === 'admin'">
+                    <div v-if="currentUserRole === 'admin'">
                         <button @click="$emit('view', drive)" class="btn btn-outline-info btn-sm">View Insights</button>
                         <button @click="$emit('interviews', drive)" class="btn btn-outline-secondary btn-sm ms-2">Interviews</button>
+                        <button v-if="drive.Remark" @click="$emit('viewNote', drive.Remark)" class="btn btn-outline-warning btn-sm ms-2">
+                            {{ drive.Status === 'Rejected' ? 'View Remark' : 'View Reason' }}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -129,8 +128,10 @@ const StudentResource = {
 
             // 4. Check Deadline
             if (this.drive.ApplyDeadline) {
-                const deadline = new Date(this.drive.ApplyDeadline);
-                if (deadline < new Date()) {
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                const deadline = new Date(this.drive.ApplyDeadline + 'T00:00:00');
+                if (deadline < today) {
                     return { eligible: false, reason: 'Application deadline has passed.' };
                 }
             }
@@ -142,17 +143,20 @@ const StudentResource = {
         formatDateTime,
         statusBadgeClass(status) {
             switch (status) {
-                case 'Approved':
                 case 'Active': return 'bg-success';
                 case 'Pending': return 'bg-warning text-dark';
+                case 'Suspended': return 'bg-warning text-dark';
                 case 'Rejected':
-                case 'Closed': return 'bg-danger';
+                case 'Application Closed': return 'bg-danger';
                 default: return 'bg-secondary';
             }
         },
         isDeadlinePassed(deadlineStr) {
             if (!deadlineStr) return false;
-            return new Date(deadlineStr) < new Date();
+            const today = new Date();
+            today.setHours(0,0,0,0);
+            const deadline = new Date(deadlineStr + 'T00:00:00');
+            return deadline < today;
         },
         async fetchDriveStats() {
             if (!this.drive.DriveID || (this.currentUserRole !== 'comp' && this.currentUserRole !== 'admin')) return;

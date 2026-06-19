@@ -1,10 +1,9 @@
 const PrivacyPolicy = {
     template: `
-    <div class="container my-5 py-5">
+    <div class="container my-2 py-2">
         <div class="row justify-content-center">
             <div class="col-md-8">
                 <h1 class="fw-bold text-center mb-4">Privacy Policy</h1>
-                <p><strong>Last updated: April 2026</strong></p>
                 
                 <p>Your privacy is important to us. It is the Placement Portal's policy to respect your privacy regarding any information we may collect from you across our website.</p>
                 

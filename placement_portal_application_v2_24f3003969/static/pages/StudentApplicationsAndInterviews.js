@@ -86,7 +86,8 @@ const StudentApplicationsAndInterviews = {
                                         </div>
                                     </td>
                                     <td>
-                                <span :class="statusBadge(app.rejection_reason ? 'Rejected' : app.status)">{{ app.rejection_reason ? 'Rejected' : app.status }}</span>
+                                        <span :class="statusBadge(app.rejection_reason ? 'Rejected' : app.status)">{{ app.rejection_reason ? 'Rejected' : app.status }}</span>
+                                        <span v-if="app.is_currently_eligible === false" class="badge bg-danger text-white ms-1" :title="app.eligibility_issues ? app.eligibility_issues.join(', ') : 'Profile ineligible'">Not Eligible</span>
                                     </td>
                                     <td>{{ formatDateTime(app.application_datetime) }}</td>
                                     <td>
@@ -165,7 +166,10 @@ const StudentApplicationsAndInterviews = {
                                             </div>
                                         </div>
                                     </td>
-                                    <td>Round {{ interview.round_no }}: {{ interview.round_name }}</td>
+                                    <td>
+                                        Round {{ interview.round_no }}: {{ interview.round_name }}
+                                        <span v-if="interview.is_currently_eligible === false" class="badge bg-danger text-white ms-1" :title="interview.eligibility_issues ? interview.eligibility_issues.join(', ') : 'Profile ineligible'">Not Eligible</span>
+                                    </td>
                                     <td>{{ formatDateTime(interview.datetime) }}</td>
                                     <td>
                                         <a v-if="isUrl(interview.location_or_link)" :href="interview.location_or_link" target="_blank" class="btn btn-sm btn-outline-primary">
@@ -217,7 +221,10 @@ const StudentApplicationsAndInterviews = {
                                             </div>
                                         </div>
                                     </td>
-                                    <td>Round {{ interview.round_no }}: {{ interview.round_name }}</td>
+                                    <td>
+                                        Round {{ interview.round_no }}: {{ interview.round_name }}
+                                        <span v-if="interview.is_currently_eligible === false" class="badge bg-danger text-white ms-1" :title="interview.eligibility_issues ? interview.eligibility_issues.join(', ') : 'Profile ineligible'">Not Eligible</span>
+                                    </td>
                                     <td>{{ formatDateTime(interview.datetime) }}</td>
                                     <td>
                                         <span v-if="interview.status=='scheduled'" class="badge bg-danger">missed</span>
@@ -334,15 +341,16 @@ const StudentApplicationsAndInterviews = {
                                     <template v-else-if="selectedApplicationForOffer.status === 'Selected'">
                                         <p class="mb-3 small text-danger"><strong>Expires On:</strong><br> {{ formatDateTime(selectedApplicationForOffer.offer_expiry_date) }}</p>
                                         
-                                        <div v-if="!deadlinePassed(selectedApplicationForOffer.offer_expiry_date)">
+                                        <div v-if="!selectedApplicationForOffer.is_offer_expired">
                                             <div v-if="selectedApplicationForOffer.offer_letter" class="mb-3">
                                                 <a :href="'/' + selectedApplicationForOffer.offer_letter" target="_blank" class="btn btn-outline-success w-100 mb-2">
                                                     <i class="bi bi-eye me-1"></i> View Offer Letter
                                                 </a>
                                             </div>
                                         </div>
-                                        <div v-else class="alert alert-warning text-center">
-                                            <span class="fw-bold">Offer Expired</span>
+                                        <div v-else class="alert alert-warning text-start">
+                                            <span class="fw-bold d-block text-center mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Offer Expired</span>
+                                            <small class="d-block text-muted text-center">This offer has expired. You can contact support/employer to request an offer letter extension if you still want to accept it.</small>
                                         </div>
                                     </template>
                                 </div>
@@ -351,8 +359,8 @@ const StudentApplicationsAndInterviews = {
                     </div>
                     <div class="modal-footer bg-light">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <button v-if="selectedApplicationForOffer.status === 'Selected' && !deadlinePassed(selectedApplicationForOffer.offer_expiry_date)" type="button" class="btn btn-outline-danger" @click="rejectOffer(selectedApplicationForOffer.id)">Reject Offer</button>
-                        <button v-if="selectedApplicationForOffer.status === 'Selected' && !deadlinePassed(selectedApplicationForOffer.offer_expiry_date)" type="button" class="btn btn-success px-4" @click="acceptOffer(selectedApplicationForOffer.id)">Accept Offer</button>
+                        <button v-if="selectedApplicationForOffer.status === 'Selected' && !selectedApplicationForOffer.is_offer_expired" type="button" class="btn btn-outline-danger" @click="rejectOffer(selectedApplicationForOffer.id)">Reject Offer</button>
+                        <button v-if="selectedApplicationForOffer.status === 'Selected' && !selectedApplicationForOffer.is_offer_expired" type="button" class="btn btn-success px-4" @click="acceptOffer(selectedApplicationForOffer.id)">Accept Offer</button>
                     </div>
                 </div>
             </div>

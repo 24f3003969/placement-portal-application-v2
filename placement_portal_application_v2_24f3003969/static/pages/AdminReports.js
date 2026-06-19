@@ -197,11 +197,11 @@ const AdminReports = {
                         </div>
                         <div class="mb-3">
                             <label for="responseText" class="form-label fw-bold">Your Response</label>
-                            <textarea v-model="responseText" class="form-control" id="responseText" rows="4" placeholder="Type your response here..."></textarea>
+                            <textarea v-model="responseText" class="form-control" id="responseText" rows="4" placeholder="Type your response here..." :disabled="selectedQuery.status === 'Closed'"></textarea>
                         </div>
                         <div class="mb-3">
                             <label for="responseStatus" class="form-label fw-bold">Update Status</label>
-                            <select v-model="responseStatus" class="form-select" id="responseStatus">
+                            <select v-model="responseStatus" class="form-select" id="responseStatus" :disabled="selectedQuery.status === 'Closed'">
                                 <option value="Open">Open</option>
                                 <option value="In Progress">In Progress</option>
                                 <option value="Closed">Closed</option>
@@ -210,7 +210,8 @@ const AdminReports = {
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <button type="button" class="btn btn-success" @click="submitResponse">Save & Send Response</button>
+                        <button type="button" class="btn btn-success" @click="submitResponse" v-if="selectedQuery.status !== 'Closed'">Save & Send Response</button>
+                        <span v-else class="text-danger fw-bold small"><i class="bi bi-lock-fill me-1"></i>This query is closed and cannot be updated.</span>
                     </div>
                 </div>
             </div>

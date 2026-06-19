@@ -223,7 +223,7 @@ const AdminDashboard={
                                     <div class="d-flex justify-content-between align-items-center">
                                         <span class="text-dark fw-bold text-truncate" style="font-size: 0.65rem; max-width: 100px;">{{ drive.company_name }}</span>
                                         <div>
-                                            <button class="btn btn-xs btn-success py-0 px-1 me-1 shadow-sm" style="font-size: 0.6rem;" @click.stop="updateDriveStatus(drive.DriveID, 'Approved')"><i class="bi bi-check"></i></button>
+                                            <button class="btn btn-xs btn-success py-0 px-1 me-1 shadow-sm" style="font-size: 0.6rem;" @click.stop="updateDriveStatus(drive.DriveID, 'Active')"><i class="bi bi-check"></i></button>
                                             <button class="btn btn-xs btn-danger py-0 px-1 shadow-sm" style="font-size: 0.6rem;" @click.stop="openDriveRejectModal(drive)"><i class="bi bi-x"></i></button>
                                         </div>
                                     </div>
@@ -406,7 +406,7 @@ const AdminDashboard={
             }
         },
         async updateDriveStatus(driveId, status, remarks = null) {
-            if (status === 'Approved' && !confirm('Are you sure you want to approve this drive?')) return;
+            if (status === 'Active' && !confirm('Are you sure you want to approve this drive?')) return;
             
             const payload = { status };
             if (remarks) payload.remarks = remarks;
@@ -443,12 +443,13 @@ const AdminDashboard={
                 headers: { 'Content-Type': 'application/json', 'Authentication-Token': localStorage.getItem('token') },
                 body: JSON.stringify({ name: this.newDepartment })
             });
+            const data = await res.json().catch(() => ({}));
             if (res.ok) {
-                alert("Department added successfully.");
+                alert(data.message || "Department added successfully.");
                 this.newDepartment = '';
                 this.manageDepartments();
             } else {
-                alert("Failed to add department.");
+                alert(data.message || "Failed to add department.");
             }
         },
         async deleteDepartment(departmentId) {
@@ -457,11 +458,12 @@ const AdminDashboard={
                 method: 'DELETE',
                 headers: { 'Authentication-Token': localStorage.getItem('token') }
             });
+            const data = await res.json().catch(() => ({}));
             if (res.ok) {
-                alert(res.message || "Department deleted successfully.");
+                alert(data.message || "Department deleted successfully.");
                 this.manageDepartments();
             } else {
-                alert(res.message || "Failed to delete department.");
+                alert(data.message || "Failed to delete department.");
             }
         },
         getInsightIcon(type) {

@@ -104,7 +104,7 @@ const StudentDetails = {
                     </div>
                 </div>
             </div>
-            <button type="submit" class="btn btn-success rounded-pill px-4" :disabled="!isFormValid">Register</button>
+            <button type="submit" class="btn btn-success rounded-pill px-4">Register</button>
         </form>
     </div>
     `,
@@ -127,10 +127,6 @@ const StudentDetails = {
         };
     },
     computed: {
-        isFormValid(){
-            return this.profile.name && this.profile.cgpa>=0 && this.profile.cgpa<=10 && !this.fileTooLarge && 
-            this.profile.resume && this.profile.roll_no && this.profile.phone && this.profile.department;
-        },
         fileTooLarge(){
             return this.profile.resume && this.profile.resume.size>5*1024*1024;
         }
@@ -143,6 +139,14 @@ const StudentDetails = {
             this.profile.resume = event.target.files[0];
         },
         async submitProfile() {
+            if (!this.profile.resume) {
+                alert("Please upload your resume.");
+                return;
+            }
+            if (this.fileTooLarge) {
+                alert("Resume file is too large! Max 5MB.");
+                return;
+            }
             try{
                 const formData=new FormData();
                 for (let key in this.profile){

@@ -37,7 +37,7 @@ const EmployerDetails={
                     <div class="row bg-light text-dark">
                         <div class="col-md-6">
                             <label class="form-label small fw-bold">Upload Logo Image (png, jpg, jpeg)</label>
-                            <input type="file" class="form-control" accept=".png, .jpg, .jpeg, image/*"@change="handleFileUpload">
+                            <input required type="file" class="form-control" accept=".png, .jpg, .jpeg, image/*"@change="handleFileUpload">
                         </div>
                     </div>
                 </div>

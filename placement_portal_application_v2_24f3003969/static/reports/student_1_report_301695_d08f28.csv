@@ -1,0 +1,32 @@
+STUDENT PLACEMENT REPORT
+
+Generated On,"18-Jun-2026, 11:23 AM"
+Student Roll No,22DS9999
+Student Name,Aarav Sharma
+Department,Data Science and AI
+CGPA,8.2
+
+--- REPORT INSIGHTS ---
+Total Applications,6
+Interviews Scheduled,5
+Offers Received,1
+Application Statuses,"{'Rejected': 5, 'Hired': 1}"
+
+
+--- APPLICATION HISTORY ---
+Sr. No.,Company Name,Drive Job Title,Type,Applied On,Current Status,Compensation,Rejection Reason,Note for Student,Last Updated
+1,TechNova Global,Lead Data Scientist Intern,Internship,17-Jun-2026,Rejected,40000/month,N/A,[RESTORED] Operational Audit: Now meeting,"18-Jun-2026, 09:51 AM"
+2,TechNova Global,Cloud Engineer,Job,13-Jun-2026,Hired,14 LPA,N/A,N/A,"18-Jun-2026, 11:22 AM"
+3,TechNova Global,Machine Learning Intern,Internship,10-Jun-2026,Rejected,40000/month,Position closed,N/A,"18-Jun-2026, 10:07 AM"
+4,TechNova Global,Data Analyst,Job,04-Jun-2026,Rejected,12 LPA,Interview round failed.,N/A,"18-Jun-2026, 01:37 AM"
+5,TechNova Global,AI Engineer,Job,31-May-2026,Rejected,18 LPA,Offer rejected by student.,N/A,"18-Jun-2026, 11:22 AM"
+6,TechNova Global,Backend Developer,Job,27-May-2026,Rejected,15 LPA,Automatically cancelled as student accepted another job offer.,N/A,"18-Jun-2026, 11:22 AM"
+
+
+--- DETAILED INTERVIEW HISTORY ---
+Sr. No.,Company Name,Job Title,Round No.,Round Name,Date & Time,Location / Link,Status,Result,Internal Remarks,Feedback for Student
+1,TechNova Global,Data Analyst,1,SQL Test,"18-Jun-2026, 05:37 AM",https://meet.google.com/abc-defg-hij,completed,failed,N/A,N/A
+2,TechNova Global,AI Engineer,1,Technical,"03-Jun-2026, 01:37 AM",N/A,completed,passed,Excellent problem solving skills.,N/A
+3,TechNova Global,AI Engineer,2,Managerial,"08-Jun-2026, 01:37 AM",N/A,completed,passed,Great communication and cultural fit.,N/A
+4,TechNova Global,Backend Developer,1,Coding Test,"13-Jun-2026, 01:37 AM",N/A,completed,passed,Good coding skills.,N/A
+5,TechNova Global,Backend Developer,2,System Design,"18-Jun-2026, 05:30 PM",https://meet.google.com/xyz-uvwx-lmn,canceled,N/A,Automatically cancelled due to job acceptance.,N/A

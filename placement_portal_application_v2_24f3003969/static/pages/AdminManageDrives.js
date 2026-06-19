@@ -16,14 +16,18 @@ const AdminManageDrives = {
                             <label class="form-label small fw-semibold text-muted">Drive Status</label>
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" value="Active" id="statusActive" v-model="selectedStatuses">
-                                <label class="form-check-label" for="statusActive">Active / Approved</label>
+                                <label class="form-check-label" for="statusActive">Active</label>
                             </div>
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" value="Pending" id="statusPending" v-model="selectedStatuses">
                                 <label class="form-check-label" for="statusPending">Pending</label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="Closed" id="statusClosed" v-model="selectedStatuses">
+                                <input class="form-check-input" type="checkbox" value="Suspended" id="statusSuspended" v-model="selectedStatuses">
+                                <label class="form-check-label" for="statusSuspended">Suspended</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="Application Closed" id="statusClosed" v-model="selectedStatuses">
                                 <label class="form-check-label" for="statusClosed">Closed</label>
                             </div>
                             <div class="form-check">
@@ -86,8 +90,9 @@ const AdminManageDrives = {
                                 :isDetailview="false"
                                 :current-user-role="'admin'"
                                 @approve="approveDrive(drive.DriveID)"
-                                @reject="openRejectModal(drive)"
-                                @close="closeDrive(drive.DriveID)"
+                                @reject="openActionModal(drive, 'Reject')"
+                                @close="openActionModal(drive, 'Close')"
+                                @suspend="openActionModal(drive, 'Suspend')"
                                 @interviews="viewDriveInterviews(drive)"
                                 @view="viewDriveDetails(drive)"
                                 @viewNote="handleViewNote"
@@ -99,33 +104,43 @@ const AdminManageDrives = {
         </div>
 
         <div v-if="currentView === 'details'">
-            <view-drive :drive="selectedDrive" @back="currentView = 'list'; selectedDrive = null" user-role="admin"></view-drive>
+            <view-drive 
+                :drive="selectedDrive" 
+                @back="currentView = 'list'; selectedDrive = null" 
+                user-role="admin"
+                @approve="approveDrive"
+                @reject="openActionModal($event, 'Reject')"
+                @suspend="openActionModal($event, 'Suspend')"
+                @close="openActionModal($event, 'Close')"
+            />
         </div>
         <div v-if="currentView === 'review'">
             <drive-details-view :drive="selectedDrive" mode="admin" @back="currentView = 'list'; selectedDrive = null" @success="handleReviewSuccess"/>
         </div>
 
+        <!-- Drive Action Modal for Reject / Suspend / Close -->
         <div class="modal fade" id="driveActionModal" tabindex="-1">
-            <div class="modal-dialog modal-lg">
+            <div class="modal-dialog">
                 <div class="modal-content" v-if="selectedDrive">
                     <div class="modal-header">
-                        <h5 class="modal-title">Review Drive: {{ selectedDrive.JobTitle }}</h5>
+                        <h5 class="modal-title">{{ actionTitle }}</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
+                        <p><strong>Job Title:</strong> {{ selectedDrive.JobTitle }}</p>
                         <p><strong>Company:</strong> {{ selectedDrive.company_name }}</p>
-                        <p><strong>Status:</strong> <span class="badge bg-secondary">{{ selectedDrive.Status }}</span></p>
+                        <p><strong>Current Status:</strong> <span class="badge" :class="statusBadgeClass(selectedDrive.Status)">{{ selectedDrive.Status }}</span></p>
                         <hr>
-                        <div v-if="selectedDrive.Status === 'Pending'">
-                            <h6 class="fw-bold">Actions</h6>
-                            <div class="mb-3">
-                                <label class="form-label">Rejection Remarks (required if rejecting)</label>
-                                <textarea v-model="rejectionRemarks" class="form-control"></textarea>
-                            </div>
-                            <button class="btn btn-danger me-2" @click="rejectDrive(selectedDrive.DriveID)" :disabled="!rejectionRemarks">Reject</button>
-                            <button class="btn btn-success" @click="approveDrive(selectedDrive.DriveID)">Approve</button>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">{{ remarkLabel }}</label>
+                            <textarea v-model="actionRemarks" class="form-control" rows="3" :placeholder="remarkPlaceholder"></textarea>
                         </div>
-                        <div v-else class="alert alert-info">This drive is already {{ selectedDrive.Status }}.</div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn" :class="actionButtonClass" @click="submitDriveAction" :disabled="isActionSubmitDisabled">
+                            Confirm Action
+                        </button>
                     </div>
                 </div>
             </div>
@@ -236,25 +251,53 @@ const AdminManageDrives = {
             interviewsModal: null,
             selectedDriveInterviews: [],
             currentView: 'list',
-            selectedStatuses: ['Active', 'Pending'],
+            selectedStatuses: ['Active', 'Pending', 'Suspended'],
             selectedTypes: ['Job', 'Internship'],
             sortBy: 'posted_date_desc',
             interviewToCancel: null,
             cancelReason: '',
-            cancelInterviewModal: null
+            cancelInterviewModal: null,
+            actionType: '',
+            actionRemarks: ''
         }
     },
     computed: {
+        actionTitle() {
+            if (this.actionType === 'Reject') return 'Reject Placement Drive';
+            if (this.actionType === 'Suspend') return 'Suspend Placement Drive';
+            if (this.actionType === 'Close') return 'Close Placement Drive';
+            return 'Drive Action';
+        },
+        remarkLabel() {
+            if (this.actionType === 'Reject') return 'Rejection Remarks (Required)';
+            if (this.actionType === 'Suspend') return 'Suspension Reason (Required)';
+            if (this.actionType === 'Close') return 'Closing Remarks (Optional)';
+            return 'Remarks';
+        },
+        remarkPlaceholder() {
+            if (this.actionType === 'Reject') return 'Specify why this placement drive is rejected...';
+            if (this.actionType === 'Suspend') return 'Specify why this placement drive is suspended...';
+            if (this.actionType === 'Close') return 'Specify why this placement drive is closed...';
+            return '';
+        },
+        actionButtonClass() {
+            if (this.actionType === 'Reject') return 'btn-danger';
+            if (this.actionType === 'Suspend') return 'btn-warning text-dark';
+            if (this.actionType === 'Close') return 'btn-danger';
+            return 'btn-primary';
+        },
+        isActionSubmitDisabled() {
+            if (this.actionType === 'Reject' || this.actionType === 'Suspend') {
+                return !this.actionRemarks.trim();
+            }
+            return false;
+        },
         filteredDrives() {
             let results = this.allDrives || [];
 
             // 1. Filter by Status (Checkboxes)
             if (this.selectedStatuses && this.selectedStatuses.length > 0) {
                 results = results.filter(drive => {
-                    // 'Active' checkbox covers both Active and Approved backend statuses
-                    if (this.selectedStatuses.includes('Active') && (drive.Status === 'Active' || drive.Status === 'Approved')) {
-                        return true;
-                    }
                     return this.selectedStatuses.includes(drive.Status);
                 });
             } else {
@@ -328,25 +371,39 @@ const AdminManageDrives = {
         },
         async approveDrive(driveId) { 
             if (confirm('Are you sure you want to approve and publish this drive?')) {
-                await this.updateDriveStatus(driveId, 'Approved'); 
+                await this.updateDriveStatus(driveId, 'Active'); 
             }
         },
-        async closeDrive(driveId) {
-            if (!confirm('Are you sure you want to close this active drive?')) return;
-            await this.updateDriveStatus(driveId, 'Closed');
-        },
-        openRejectModal(drive) {
+        openActionModal(drive, type) {
             this.selectedDrive = drive;
-            this.rejectionRemarks = '';
-            this.driveActionModal.show();
-        },
-        async rejectDrive(driveId) {
-            if (!this.rejectionRemarks) {
-                alert("Rejection remarks are required to reject a drive.");
-                return;
+            this.actionType = type;
+            this.actionRemarks = '';
+            if (this.driveActionModal) {
+                this.driveActionModal.show();
             }
-            if (confirm('Are you sure you want to reject this drive?')) {
-                await this.updateDriveStatus(driveId, 'Rejected', this.rejectionRemarks);
+        },
+        async submitDriveAction() {
+            if (!this.selectedDrive) return;
+            const driveId = this.selectedDrive.DriveID;
+            
+            let status = '';
+            if (this.actionType === 'Reject') status = 'Rejected';
+            else if (this.actionType === 'Suspend') status = 'Suspended';
+            else if (this.actionType === 'Close') status = 'Application Closed';
+            
+            const confirmed = confirm(`Are you sure you want to change the status of this drive to ${status}?`);
+            if (!confirmed) return;
+            
+            await this.updateDriveStatus(driveId, status, this.actionRemarks);
+        },
+        statusBadgeClass(status) {
+            switch (status) {
+                case 'Active': return 'bg-success';
+                case 'Pending': return 'bg-warning text-dark';
+                case 'Suspended': return 'bg-warning text-dark';
+                case 'Rejected':
+                case 'Application Closed': return 'bg-danger';
+                default: return 'bg-secondary';
             }
         },
         async updateDriveStatus(driveId, status, remarks = null) {
@@ -360,7 +417,11 @@ const AdminManageDrives = {
             if (res.ok) { 
                 alert(`Drive status updated to ${status}.`); 
                 if (this.driveActionModal) this.driveActionModal.hide(); 
-                this.fetchDrives(); 
+                await this.fetchDrives(); 
+                if (this.selectedDrive) {
+                    const updated = this.allDrives.find(d => d.DriveID === driveId);
+                    if (updated) this.selectedDrive = updated;
+                }
             } else { 
                 alert('Failed to update drive status.'); 
             }
@@ -422,7 +483,7 @@ const AdminManageDrives = {
     mounted() {
         if (this.$route.query.q) {
             this.searchQuery = this.$route.query.q;
-            this.selectedStatuses = ['Active', 'Pending', 'Closed', 'Rejected'];
+            this.selectedStatuses = ['Active', 'Pending', 'Application Closed', 'Rejected'];
         }
         this.fetchDrives(); 
         

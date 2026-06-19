@@ -1,173 +1,186 @@
-import { formatDateTime } from '../utils/formatDateTime.js';
+import { formatDateTime, getMinDate } from '../utils/formatDateTime.js';
 const DriveDetailView = {
     props: ['drive', 'mode'],
     template:`
-    <div class="card shadow-sm border-0 p-4 p-md-5 rounded-4 transition-all" style="transition: transform 0.2s ease-in-out;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
-        <button @click="$emit('back')" class="btn btn-link text-decoration-none mb-3 px-0 fw-bold"><i class="bi bi-arrow-left me-2"></i>Back</button>
-        <div v-if="mode==='company'" class="alert alert-info py-2 small mb-4"><i class="bi bi-info-circle me-2"></i>Review how this will look to students and Admin.</div>
+    <div class="card shadow-sm border-0 p-3 p-md-4 rounded-4 transition-all" style="transition: transform 0.2s ease-in-out;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+        <button @click="$emit('back')" class="btn btn-link text-decoration-none mb-2 px-0 fw-bold py-0"><i class="bi bi-arrow-left me-2"></i>Back</button>
+        <div v-if="mode==='company'" class="alert alert-info py-1.5 small mb-3"><i class="bi bi-info-circle me-2"></i>Review how this will look to students and Admin.</div>
         
-        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start border-bottom pb-3 mb-4 gap-3">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start border-bottom pb-2 mb-3 gap-2">
             <div>
-                <h2 class="fw-bold mb-1">{{ drive.JobTitle }}</h2>
-                <p class="text-muted mb-0"><i class="bi bi-geo-alt-fill text-danger me-1"></i>{{ drive.Location }} ({{ drive.WorkMode }}) <span class="mx-2 text-light">|</span> <i class="bi bi-briefcase-fill text-primary me-1"></i>{{ drive.Type }}</p>
+                <h4 class="fw-bold mb-1 text-dark">{{ drive.JobTitle }}</h4>
+                <p class="text-muted mb-0 small"><i class="bi bi-geo-alt-fill text-danger me-1"></i>{{ drive.Location }} ({{ drive.WorkMode }}) <span class="mx-2 text-light">|</span> <i class="bi bi-briefcase-fill text-primary me-1"></i>{{ drive.Type }}</p>
             </div>
-            <div class="text-md-end bg-light p-3 rounded-3 border">
-                <h4 class="fw-bold text-success">₹{{ drive.Salary }} {{ drive.Type === 'Job' ? 'LPA' : '/month' }}</h4>
-                <p class="small text-muted mb-0 fw-medium"><i class="bi bi-clock-history me-1"></i>Deadline: {{ formatDateTime(drive.ApplyDeadline) }}</p>
+            <div class="text-md-end bg-light p-3 rounded-4 border">
+                <h5 class="fw-bold text-success mb-1">₹{{ drive.Salary }} {{ drive.Type === 'Job' ? 'LPA' : '/month' }}</h5>
+                <p class="small text-muted mb-0 fw-medium" style="font-size: 0.75rem;"><i class="bi bi-clock-history me-1"></i>Deadline: {{ formatDateTime(drive.ApplyDeadline, false) }}</p>
             </div>
         </div>
             
-        <div class="row">
-            <div class="col-md-6">
-                <h6 class="fw-bold mb-2 text-uppercase small text-muted">Skills Needed</h6>
-                <div class="d-flex flex-wrap gap-2">
-                    <span v-for="skill in drive.RequiredSkills" class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 shadow-sm transition-all" style="transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">{{ skill }}</span>
+        <div class="row g-3">
+            <div class="col-md-4">
+                <h6 class="fw-bold mb-1.5 text-uppercase text-muted" style="font-size: 0.75rem;"><i class="bi bi-gear-fill me-1 text-primary"></i>Skills Needed</h6>
+                <div class="d-flex flex-wrap gap-1">
+                    <span v-for="skill in drive.RequiredSkills" :key="skill" class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 shadow-xs" style="font-size: 0.7rem;">{{ skill }}</span>
                 </div>
             </div>
-            <div class="col-md-6 mt-3 mt-md-0">
-                <h6 class="fw-bold mb-2 text-uppercase small text-muted">Interview Rounds</h6>
-                <div v-if="drive.InterviewRounds && drive.InterviewRounds.length > 0" class="d-flex flex-wrap gap-2">
-                    <span v-for="(round, index) in drive.InterviewRounds" :key="index" class="badge bg-light text-dark border border-secondary px-3 py-2 fw-medium shadow-sm transition-all" style="font-size: 0.85rem; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-                        <span class="text-primary me-1 fw-bold">R{{ index + 1 }}:</span> {{ round }}
+            <div class="col-md-4">
+                <h6 class="fw-bold mb-1.5 text-uppercase text-muted" style="font-size: 0.75rem;"><i class="bi bi-building-fill me-1 text-info"></i>Eligible Departments</h6>
+                <div v-if="formattedDepartments && formattedDepartments.length > 0" class="d-flex flex-wrap gap-1">
+                    <span v-for="dept in formattedDepartments" :key="dept" class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1 shadow-xs fw-medium" style="font-size: 0.7rem;">
+                        {{ dept }}
                     </span>
                 </div>
                 <div v-else>
-                    <p class="text-muted small mb-0">Details about interview rounds have not been provided.</p>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 shadow-xs fw-medium" style="font-size: 0.7rem;">
+                        Open to All Departments
+                    </span>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <h6 class="fw-bold mb-1.5 text-uppercase text-muted" style="font-size: 0.75rem;"><i class="bi bi-list-task me-1 text-secondary"></i>Interview Rounds</h6>
+                <div v-if="drive.InterviewRounds && drive.InterviewRounds.length > 0" class="d-flex flex-wrap gap-1">
+                    <span v-for="(round, index) in drive.InterviewRounds" :key="index" class="badge bg-light text-dark border border-secondary px-2 py-1 fw-medium shadow-xs" style="font-size: 0.7rem;">
+                        <span class="text-primary me-0.5 fw-bold">R{{ index + 1 }}:</span> {{ round }}
+                    </span>
+                </div>
+                <div v-else>
+                    <p class="text-muted small mb-0" style="font-size: 0.75rem;">No rounds configured.</p>
                 </div>
             </div>
         </div>
-        <div class="mt-4 pt-4 border-top">
-            <h5 class="fw-bold mb-3 text-dark">Job Description</h5>
-            <div class="mb-4 text-secondary" style="line-height: 1.6;" v-html="drive.JobDescription"></div>
+        <div class="mt-3 pt-3 border-top">
+            <h6 class="fw-bold mb-2 text-dark">Job Description</h6>
+            <div class="mb-3 text-secondary small" style="line-height: 1.5;" v-html="drive.JobDescription"></div>
         </div>
 
-        <div class="mt-4 pt-4 border-top d-flex gap-3">
+        <div class="mt-3 pt-3 border-top d-flex gap-3">
             <div v-if="mode === 'drive_stats_view'" class="w-100">
-                <h5 class="fw-bold mb-3">Drive Statistics</h5>
-                <div class="row g-3">
+                <h6 class="fw-bold mb-2">Drive Statistics</h6>
+                <div class="row g-2">
                     <div class="col-sm-6 col-md-3">
-                        <div class="p-3 bg-light rounded border text-center shadow-sm" style="transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
-                            <h6 class="small text-muted mb-1 text-uppercase fw-bold">Drive Status</h6>
-                            <p class="fs-4 fw-bold text-primary mb-0">{{ drive.Status }}</p>
+                        <div class="p-2 bg-light rounded border text-center shadow-sm" style="transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                            <h6 class="small text-muted mb-1 text-uppercase fw-bold" style="font-size: 0.65rem;">Drive Status</h6>
+                            <p class="fs-5 fw-bold text-primary mb-0">{{ drive.Status }}</p>
                         </div>
                     </div>
                     <div class="col-sm-6 col-md-3">
-                        <div class="p-3 bg-light rounded border text-center shadow-sm" style="transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
-                            <h6 class="small text-muted mb-1 text-uppercase fw-bold">Total Applicants</h6>
-                            <p class="fs-4 fw-bold text-dark mb-0">{{ total_applicants }}</p>
+                        <div class="p-2 bg-light rounded border text-center shadow-sm" style="transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                            <h6 class="small text-muted mb-1 text-uppercase fw-bold" style="font-size: 0.65rem;">Total Applicants</h6>
+                            <p class="fs-5 fw-bold text-dark mb-0">{{ total_applicants }}</p>
                         </div>
                     </div>
                     <div class="col-sm-6 col-md-3">
-                        <div class="p-3 bg-light rounded border text-center shadow-sm" style="transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
-                            <h6 class="small text-muted mb-1 text-uppercase fw-bold">Shortlisted</h6>
-                            <p class="fs-4 fw-bold text-success mb-0">{{ shortlisted }}</p>
+                        <div class="p-2 bg-light rounded border text-center shadow-sm" style="transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                            <h6 class="small text-muted mb-1 text-uppercase fw-bold" style="font-size: 0.65rem;">Shortlisted</h6>
+                            <p class="fs-5 fw-bold text-success mb-0">{{ shortlisted }}</p>
                         </div>
                     </div>
                     <div class="col-sm-6 col-md-3">
-                        <div class="p-3 bg-light rounded border text-center shadow-sm" style="transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
-                            <h6 class="small text-muted mb-1 text-uppercase fw-bold">Interview Rounds</h6>
-                            <p class="fs-4 fw-bold text-info mb-0">{{ drive.InterviewRounds ? drive.InterviewRounds.length : 0 }}</p>
+                        <div class="p-2 bg-light rounded border text-center shadow-sm" style="transition: transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                            <h6 class="small text-muted mb-1 text-uppercase fw-bold" style="font-size: 0.65rem;">Interview Rounds</h6>
+                            <p class="fs-5 fw-bold text-info mb-0">{{ drive.InterviewRounds ? drive.InterviewRounds.length : 0 }}</p>
                         </div>
                     </div>
                 </div>
             </div>
             
             <div v-else-if="mode === 'student'" class="w-100">
-                <div v-if="!eligibilityStatus.eligible" class="alert alert-danger p-4 text-center rounded-4 w-100 shadow-sm">
-                    <h5 class="fw-bold mb-2"><i class="bi bi-x-octagon-fill me-2"></i>Not Eligible to Apply</h5>
-                    <p class="mb-0">{{ eligibilityStatus.reason }}</p>
+                <div v-if="!eligibilityStatus.eligible" class="alert alert-danger p-3 text-center rounded-4 w-100 shadow-sm mb-0">
+                    <h6 class="fw-bold mb-1.5"><i class="bi bi-x-octagon-fill me-2"></i>Not Eligible to Apply</h6>
+                    <p class="mb-0 small">{{ eligibilityStatus.reason }}</p>
                 </div>
                 
                 <div v-else-if="!application">
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold">Resume Option</label>
-                        <select class="form-select" v-model="form.resumeType">
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold mb-1">Resume Option</label>
+                        <select class="form-select form-select-sm" v-model="form.resumeType">
                             <option value="profile">Use Default Resume (from Profile)</option>
                             <option value="custom">Upload New Resume for this Drive</option>
                         </select>
                     </div>
 
-                    <div v-if="form.resumeType === 'custom'" class="mb-3">
-                        <label class="form-label small fw-bold">Upload Resume (PDF)</label>
-                        <input type="file" class="form-control" accept=".pdf" @change="handleResumeUpload">
+                    <div v-if="form.resumeType === 'custom'" class="mb-2">
+                        <label class="form-label small fw-bold mb-1">Upload Resume (PDF)</label>
+                        <input type="file" class="form-control form-control-sm" accept=".pdf" @change="handleResumeUpload">
                     </div>
-                    <div class="card bg-light border-0 shadow-sm mb-4">
-                        <div class="card-body">
-                            <label class="form-label small fw-bold text-dark"><i class="bi bi-calendar-check me-2"></i>Availability to Join</label>
-                            <div class="form-check mb-2">
+                    <div class="card bg-light border-0 shadow-sm mb-3">
+                        <div class="card-body p-2.5">
+                            <label class="form-label small fw-bold text-dark mb-1.5"><i class="bi bi-calendar-check me-2"></i>Availability to Join</label>
+                            <div class="form-check mb-1">
                                 <input class="form-check-input" type="radio" id="availYes" :value="true" v-model="form.availableImmediately">
-                                <label class="form-check-label small" for="availYes">
+                                <label class="form-check-label small" for="availYes" style="font-size: 0.8rem;">
                                     Yes, I am available to join immediately upon selection.
                                 </label>
                             </div>
-                            <div class="form-check mb-3">
+                            <div class="form-check mb-0">
                                 <input class="form-check-input" type="radio" id="availNo" :value="false" v-model="form.availableImmediately">
-                                <label class="form-check-label small" for="availNo">
+                                <label class="form-check-label small" for="availNo" style="font-size: 0.8rem;">
                                     No, I have a delayed availability.
                                 </label>
                             </div>
 
-                            <div v-if="!form.availableImmediately" class="p-3 border rounded bg-white mt-2 transition-all">
+                            <div v-if="!form.availableImmediately" class="p-2 border rounded bg-white mt-2 transition-all">
                                 <div class="mb-2">
-                                    <label class="form-label small fw-bold text-muted">Expected Availability Date</label>
-                                    <input type="date" class="form-control form-control-sm" v-model="form.availableFrom" required>
+                                    <label class="form-label small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Expected Availability Date</label>
+                                    <input type="date" class="form-control form-control-sm" v-model="form.availableFrom" :min="getMinDate()" required>
                                 </div>
                                 <div>
-                                    <label class="form-label small fw-bold text-muted">Commitment Clarification</label>
-                                    <textarea class="form-control form-control-sm" v-model="form.availabilityRemarks" rows="2" placeholder="Briefly explain your current commitments (e.g., Final exams ending June 10th)..." required></textarea>
+                                    <label class="form-label small fw-bold text-muted mb-1" style="font-size: 0.75rem;">Commitment Clarification</label>
+                                    <textarea class="form-control form-control-sm" v-model="form.availabilityRemarks" rows="2" placeholder="Briefly explain commitments..." required style="font-size: 0.8rem;"></textarea>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <div class="form-check mb-3">
+                    <div class="form-check mb-2">
                         <input class="form-check-input" type="checkbox" v-model="form.isAvailable" id="availCheck">
-                        <label class="form-check-label" for="availCheck">I confirm my availability and agree to the terms.</label>
+                        <label class="form-check-label small" for="availCheck" style="font-size: 0.8rem;">I confirm my availability and agree to the terms.</label>
                     </div>
                     
-                    <button :disabled="!form.isAvailable || loading" @click="submitApplication" class="btn btn-primary px-5">
+                    <button :disabled="!form.isAvailable || loading" @click="submitApplication" class="btn btn-primary btn-sm px-4">
                         {{ loading ? 'Submitting...' : 'Confirm Application' }}
                     </button>
                 </div>
-                <div v-else class="alert alert-info w-100">
+                <div v-else class="alert alert-info w-100 mb-0 py-2.5 small">
                     <strong><i class="bi bi-info-circle-fill me-2"></i>You have already applied for this drive.</strong>
-                    <span class="d-block mt-2">Current Status: <span class="badge bg-primary ms-1">{{ application.status || 'Applied' }}</span></span>
+                    <span class="d-block mt-1.5">Current Status: <span class="badge bg-primary ms-1" style="font-size: 0.7rem;">{{ application.status || 'Applied' }}</span></span>
                 </div>
             </div>
 
-            <div v-else-if="mode === 'admin'" class="p-4 bg-light rounded-4 border shadow-sm w-100">
-                <h5 class="fw-bold mb-4">Admin Decision Portal</h5>
+            <div v-else-if="mode === 'admin'" class="p-3 bg-light rounded-4 border shadow-sm w-100">
+                <h6 class="fw-bold mb-2">Admin Decision Portal</h6>
                 
                 <div v-if="drive.Status === 'Pending'">
-                    <div class="mb-4">
-                        <label class="form-label small fw-bold text-danger">Rejection Remarks (Required if rejecting)</label>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold text-danger mb-1">Rejection Remarks (Required if rejecting)</label>
                         <textarea 
                             v-model="adminForm.remarks" 
-                            class="form-control" 
-                            rows="3" 
-                            placeholder="Explain why this drive is being rejected (e.g., 'Salary too low', 'Missing skills')">
+                            class="form-control form-control-sm" 
+                            rows="2" 
+                            placeholder="Explain why this drive is being rejected...">
                         </textarea>
                     </div>
 
-                    <div class="d-flex gap-3">
+                    <div class="d-flex gap-2">
                         <button 
-                            class="btn btn-outline-danger px-4 fw-bold" 
+                            class="btn btn-outline-danger btn-sm px-3 fw-bold" 
                             @click="updateStatus('Rejected')"
                             :disabled="!adminForm.remarks || loading">
                             Reject Drive
                         </button>
 
                         <button 
-                            class="btn btn-success px-5 fw-bold" 
-                            @click="updateStatus('Approved')"
+                            class="btn btn-success btn-sm px-4 fw-bold" 
+                            @click="updateStatus('Active')"
                             :disabled="loading">
                             Approve & Publish
                         </button>
                     </div>
                 </div>
 
-                <div v-else class="alert" :class="drive.Status === 'Approved' ? 'alert-success' : 'alert-danger'">
+                <div v-else class="alert py-2 mb-0 small" :class="drive.Status === 'Active' ? 'alert-success' : 'alert-danger'">
                     <strong>Status: {{ drive.Status }}</strong>
-                    <p v-if="drive.Remark" class="mb-0 mt-2 small">Note: {{ drive.Remark }}</p>
+                    <p v-if="drive.Remark" class="mb-0 mt-1.5 small">Note: {{ drive.Remark }}</p>
                 </div>
             </div>
         </div>
@@ -204,13 +217,15 @@ const DriveDetailView = {
                 if (!hasAll) return { eligible: false, reason: `You are missing some required skills: ${missingSkills.join(', ')}` };
             }
 
-            if (this.drive.Status === 'Closed') {
+             if (this.drive.Status === 'Application Closed') {
                 return { eligible: false, reason: 'This placement drive has been closed and is no longer accepting applications.' };
             }
             
             if (this.drive.ApplyDeadline) {
-                const deadline = new Date(this.drive.ApplyDeadline);
-                if (deadline < new Date()) {
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                const deadline = new Date(this.drive.ApplyDeadline + 'T00:00:00');
+                if (deadline < today) {
                     return { eligible: false, reason: 'Application deadline has passed.' };
                 }
             }
@@ -222,10 +237,16 @@ const DriveDetailView = {
             if (!this.form.availableImmediately){
                 if (!this.form.availableFrom || !this.form.availabilityRemarks) return false;
             }
+        },
+        formattedDepartments() {
+            const depts = this.drive?.Departments || this.drive?.departments;
+            if (!depts) return [];
+            return depts.map(d => typeof d === 'object' ? (d.department || '') : String(d));
         }
     },
     methods: {
         formatDateTime,
+        getMinDate,
         handleResumeUpload(event) {
             this.form.customResume = event.target.files[0];
         },
@@ -260,6 +281,11 @@ const DriveDetailView = {
                 }
                 payload.append('available_immediately', this.form.availableImmediately);
                 if (!this.form.availableImmediately) {
+                    if (new Date(this.form.availableFrom) < new Date(new Date().setHours(0,0,0,0))) {
+                        alert("Availability date cannot be in the past.");
+                        this.loading = false;
+                        return;
+                    }
                     payload.append('available_from', this.form.availableFrom);
                     payload.append('availability_remarks', this.form.availabilityRemarks);
                 }

@@ -3,7 +3,8 @@ import { formatDateTime } from "../utils/formatDateTime.js";
 const CompanyProfile = {
     props: {
         isAdminView: { type: Boolean, default: false },
-        userId: { type: Number, default: null }
+        userId: { type: Number, default: null },
+        userActive: { type: Boolean, default: true }
     },
     template: `
     <div class="container mt-4">
@@ -66,12 +67,12 @@ const CompanyProfile = {
                     </div>
                 </div>
                 <div class="card-footer bg-light text-end border-0">
-                    <button v-if="profile.is_approved" @click="isEditing = true" class="btn btn-primary">Edit Profile</button>
-                    <div v-else-if="isAdminView">
-                        <button @click="manageCompany(profile.id, 'approved')" class="btn btn-success">Approve Profile</button>
-                        <button @click="manageCompany(profile.id, 'rejected')" class="btn btn-danger">Reject Profile</button>
+                    <button v-if="profile.is_approved || isAdminView" @click="isEditing = true" class="btn btn-primary me-2">Edit Profile</button>
+                    <div v-if="!profile.is_approved && isAdminView" class="d-inline-block">
+                        <button @click="manageCompany(profile.id, 'approved')" class="btn btn-success me-2">Approve Profile</button>
+                        <button v-if="userActive" @click="manageCompany(profile.id, 'rejected')" class="btn btn-danger">Reject Profile</button>
                     </div>
-                    <button v-else class="btn btn-secondary" disabled>Pending Approval</button>
+                    <button v-if="!profile.is_approved && !isAdminView" class="btn btn-secondary" disabled>Pending Approval</button>
                 </div>
             </div>
 
@@ -114,10 +115,7 @@ const CompanyProfile = {
                             </div>
                             <div class="col-12" v-if="isAdminView">
                                 <label class="form-label small fw-bold">Company Logo</label>
-                                <div class="input-group">
-                                    <input type="file" accept="image/*" class="form-control" @change="changelogo">
-                                    <button class="btn btn-outline-secondary" type="button" @click="uploadcompany_logo" :disabled="!newPicture">Upload New Logo</button>
-                                </div>
+                                <input type="file" accept="image/*" class="form-control" @change="changelogo">
                             </div>
                         </div>
                         <hr class="my-4">
@@ -264,26 +262,30 @@ const CompanyProfile = {
     methods: {
         formatDateTime,
         async updateProfile() {
-            let payload = {...this.profile};
-            if (this.isAdminView) {
-                payload.user_id = this.userId;
-            }
+            try {
+                if (this.newPicture) await this.uploadcompany_logo();
 
-            const res = await fetch('/api/company_profile', {
-                method: 'POST',
-                headers: { 
-                    'Authentication-Token': localStorage.getItem('token'),
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            });
-            if (res.ok) {
-                alert("Profile updated successfully!");
-                this.isEditing = false;
-            } else {
-                console.error('Failed to update profile:', res.status);
-                alert("Failed to update profile. Please try again.");
-            }
+                let payload = {...this.profile};
+                if (this.isAdminView) {
+                    payload.user_id = this.userId;
+                }
+
+                const res = await fetch('/api/company_profile', {
+                    method: 'POST',
+                    headers: { 
+                        'Authentication-Token': localStorage.getItem('token'),
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    alert("Profile updated successfully!");
+                    this.isEditing = false;
+                } else {
+                    console.error('Failed to update profile:', res.status);
+                    alert("Failed to update profile. Please try again.");
+                }
+            } catch (error) { console.error(error); }
         },
         async manageCompany(companyId, action) {
             if (!confirm(`Are you sure you want to ${action} this company?`)) return;
@@ -332,49 +334,16 @@ const CompanyProfile = {
             console.log("File selected: ",this.newPicture)
         },
         async uploadcompany_logo() {
-            if (!this.newPicture) return alert("Please select an image first!");
-
             const formData = new FormData();
             formData.append('logo_image', this.newPicture);
-            console.log("Company logo upload - File:", this.newPicture.name);
-
-            try {
-                const res = await fetch('/api/company_logo', {
-                    method: 'POST',
-                    headers: { 'Authentication-Token': localStorage.getItem('token') },
-                    body: formData
-                });
-                
-                console.log("Company logo upload response:", res.status, res.statusText);
-
-                if (res.ok) {
-                    try {
-                        const data = await res.json();
-                        console.log("Profile pic response data:", data);
-                        alert("Logo updated!");
-                        this.newPicture = null;
-                        this.profile.logo_image = data.path; // Update logo without reloading
-                    } catch (parseErr) {
-                        console.log("Company logo updated (no JSON response)");
-                        alert("Logo updated!");
-                        location.reload();
-                    }
-                } else {
-                    try {
-                        const contentType = res.headers.get('content-type');
-                        if (contentType && contentType.includes('application/json')) {
-                            const errorData = await res.json();
-                            alert(`Upload failed: ${errorData.message || 'Please try again'}`);
-                        } else {
-                            alert(`Upload failed: ${res.statusText}`);
-                        }
-                    } catch (parseErr) {
-                        alert(`Upload failed: Please try again`);
-                    }
-                }
-            } catch (err) {
-                console.error("Upload error:", err);
-                alert("Upload error: " + err.message);
+            if (this.isAdminView && this.userId) {
+                formData.append('user_id', this.userId);
+            }
+            const res = await fetch('/api/company_logo', { method: 'POST', headers: { 'Authentication-Token': localStorage.getItem('token') }, body: formData });
+            if (res.ok) {
+                const data = await res.json();
+                this.profile.logo_image = data.path;
+                this.newPicture = null;
             }
         },
         async deleteTemplate(templateId) {

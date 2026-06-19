@@ -12,9 +12,26 @@ const ViewDrive = {
                 <div>
                     <button @click="$emit('back')" class="btn btn-light me-3"><i class="bi bi-arrow-left"></i> Back</button>
                     <h3 class="d-inline-block mb-0 fw-bold">Drive Insights: {{ drive.JobTitle }}</h3>
+                    <span class="badge ms-3" :class="statusBadgeClass(drive.Status)">{{ drive.Status }}</span>
                 </div>
                 <div>
                     <button @click="showDetails = true" class="btn btn-outline-info me-2">View Drive Details</button>
+                    
+                    <span v-if="userRole === 'admin'" class="d-inline-block">
+                        <span v-if="drive.Status === 'Active'">
+                            <button @click="$emit('suspend', drive)" class="btn btn-warning me-2"><i class="bi bi-pause-fill me-1"></i>Suspend</button>
+                            <button @click="$emit('close', drive)" class="btn btn-danger me-2"><i class="bi bi-x-circle-fill me-1"></i>Close Drive</button>
+                        </span>
+                        <span v-else-if="drive.Status === 'Suspended'">
+                            <button @click="$emit('approve', drive.DriveID)" class="btn btn-success me-2"><i class="bi bi-play-fill me-1"></i>Re-activate</button>
+                            <button @click="$emit('close', drive)" class="btn btn-danger me-2"><i class="bi bi-x-circle-fill me-1"></i>Close Drive</button>
+                        </span>
+                        <span v-else-if="drive.Status === 'Pending'">
+                            <button @click="$emit('approve', drive.DriveID)" class="btn btn-success me-2"><i class="bi bi-check-circle-fill me-1"></i>Approve</button>
+                            <button @click="$emit('reject', drive)" class="btn btn-danger me-2"><i class="bi bi-x-circle-fill me-1"></i>Reject</button>
+                        </span>
+                    </span>
+                    
                     <button v-if="userRole === 'comp'" @click="screenApplications" class="btn btn-primary"><i class="bi bi-person-check-fill me-2"></i>Screen Applications</button>
                 </div>
             </div>
@@ -172,6 +189,16 @@ const ViewDrive = {
         },
         screenApplications() {
             this.$router.push({ path: '/company_applications', query: { drive_id: this.drive.DriveID } });
+        },
+        statusBadgeClass(status) {
+            switch (status) {
+                case 'Active': return 'bg-success';
+                case 'Pending': return 'bg-warning text-dark';
+                case 'Suspended': return 'bg-warning text-dark';
+                case 'Rejected':
+                case 'Application Closed': return 'bg-danger';
+                default: return 'bg-secondary';
+            }
         }
     },
     mounted() {

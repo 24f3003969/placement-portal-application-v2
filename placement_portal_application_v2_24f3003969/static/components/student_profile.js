@@ -157,14 +157,14 @@ const StudentProfile = {
                                 <label class="form-label small fw-bold">About Me</label>
                                 <textarea class="form-control" v-model="profile.about_me" rows="4" placeholder="Write a brief summary about yourself, your career goals, and what you're passionate about."></textarea>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-6" v-if="!isAdminView">
                                 <label class="form-label small fw-bold">Resume Upload (PDF)</label>
-                                <input type="file" accept=".pdf,.doc,.docx" class="form-control" @change="e => newResumeFile = e.target.files[0]">
+                                <input type="file" accept=".pdf,.doc,.docx" class="form-control" @change="changeResume">
                                 <small v-if="profile.resume" class="text-success mt-1 d-block"><i class="bi bi-check-circle-fill me-1"></i> Resume currently uploaded</small>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-6" v-if="!isAdminView">
                                 <label class="form-label small fw-bold">Profile Picture</label>
-                                <input type="file" accept="image/*" class="form-control" @change="e => newPicture = e.target.files[0]">
+                                <input type="file" accept="image/*" class="form-control" @change="changePicture">
                                 <small v-if="profile.profile_pic && !profile.profile_pic.includes('default')" class="text-success mt-1 d-block"><i class="bi bi-check-circle-fill me-1"></i> Custom picture currently uploaded</small>
                             </div>
                         </div>
@@ -374,21 +374,42 @@ const StudentProfile = {
                 if (Array.isArray(payload.skills)) {
                     payload.skills = payload.skills.join(', ');
                 }
+
                 const res = await fetch('/api/student_profile', {
                     method: 'POST',
                     headers: { 'Authentication-Token': localStorage.getItem('token'), 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                if (res.ok) { alert("Profile updated!"); this.isEditing = false; } 
+
+                if (res.ok) { 
+                    alert("Profile updated!"); 
+                    this.isEditing = false;
+                    if (typeof this.fetchProfile === 'function') {
+                        this.fetchProfile();
+                    } else if (typeof this.loadStudentProfileBundle === 'function') {
+                        this.loadStudentProfileBundle();
+                    }
+                } else {
+                    const err = await res.json();
+                    alert(err.message || "Failed to update profile.");
+                }
             } catch (error) { console.error(error); }
         },
+        changeResume(event) {
+            this.newResumeFile = event.target.files[0];
+        },
+        changePicture(event) {
+            this.newPicture = event.target.files[0];
+        },
         async uploadNewResume() {
-            const formData = new FormData(); formData.append('resume', this.newResumeFile);
+            const formData = new FormData(); 
+            formData.append('resume', this.newResumeFile);
             const res = await fetch('/api/student_resume', { method: 'POST', headers: { 'Authentication-Token': localStorage.getItem('token') }, body: formData });
             if (res.ok) { const data = await res.json(); this.profile.resume = data.path; this.newResumeFile = null; }
         },
         async uploadProfilePicture() {
-            const formData = new FormData(); formData.append('profile_pic', this.newPicture);
+            const formData = new FormData(); 
+            formData.append('profile_pic', this.newPicture);
             const res = await fetch('/api/profile_pic', { method: 'POST', headers: { 'Authentication-Token': localStorage.getItem('token') }, body: formData });
             if (res.ok) { const data = await res.json(); this.profile.profile_pic = data.path; this.newPicture = null; }
         },

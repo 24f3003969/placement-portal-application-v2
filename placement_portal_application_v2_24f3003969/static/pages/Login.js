@@ -6,8 +6,13 @@ const Login={
                 
                 <!-- Error Alert -->
                 <div v-if="errorMessage" class="alert alert-danger alert-dismissible fade show" role="alert">
-                    {{ errorMessage }}
+                    <span v-html="errorMessage"></span>
                     <button type="button" class="btn-close" @click="errorMessage = ''" aria-label="Close"></button>
+                    <div v-if="showRejectedProfileBtn" class="mt-2 text-end">
+                        <button type="button" class="btn btn-sm btn-outline-danger" @click="showRejectedProfileModal = true">
+                            View Submitted Profile
+                        </button>
+                    </div>
                 </div>
                 
                 <!-- Success Alert -->
@@ -34,6 +39,57 @@ const Login={
                     Don't have an account? <router-link to='/signup'>Register</router-link>
                 </div>
             </div>
+
+            <!-- Rejected Profile Modal -->
+            <div v-if="showRejectedProfileModal" class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5); z-index: 1050;">
+                <div class="modal-dialog modal-lg modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header bg-danger text-white">
+                            <h5 class="modal-title"><i class="bi bi-building me-2"></i>Submitted Profile: {{ rejectedProfileData?.company_name }}</h5>
+                            <button type="button" class="btn-close btn-close-white" @click="showRejectedProfileModal = false"></button>
+                        </div>
+                        <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                            <div class="row g-3 text-start">
+                                <div class="col-md-6">
+                                    <strong class="text-muted d-block small">Company Name</strong>
+                                    <span class="fs-6 fw-semibold text-dark">{{ rejectedProfileData?.company_name }}</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <strong class="text-muted d-block small">Primary Email</strong>
+                                    <span class="fs-6 text-dark">{{ rejectedProfileData?.email }}</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <strong class="text-muted d-block small">Website</strong>
+                                    <a :href="rejectedProfileData?.website" target="_blank">{{ rejectedProfileData?.website }}</a>
+                                </div>
+                                <div class="col-md-6">
+                                    <strong class="text-muted d-block small">Contact Number</strong>
+                                    <span class="fs-6 text-dark">{{ rejectedProfileData?.contact }}</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <strong class="text-muted d-block small">GSTIN</strong>
+                                    <span class="fs-6 text-dark">{{ rejectedProfileData?.gstin }}</span>
+                                </div>
+                                <div class="col-md-6" v-if="rejectedProfileData?.secondary_email">
+                                    <strong class="text-muted d-block small">Secondary Email</strong>
+                                    <span class="fs-6 text-dark">{{ rejectedProfileData?.secondary_email }}</span>
+                                </div>
+                                <div class="col-12">
+                                    <strong class="text-muted d-block small">Office Address</strong>
+                                    <span class="fs-6 text-dark">{{ rejectedProfileData?.address }}</span>
+                                </div>
+                                <div class="col-12" v-if="rejectedProfileData?.description">
+                                    <strong class="text-muted d-block small">Description</strong>
+                                    <p class="mb-0 bg-light p-3 rounded text-dark" style="white-space: pre-wrap;">{{ rejectedProfileData?.description }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" @click="showRejectedProfileModal = false">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     `,
     data(){
@@ -42,7 +98,10 @@ const Login={
             password: '',
             errorMessage: '',
             successMessage: '',
-            isLoading: false
+            isLoading: false,
+            showRejectedProfileBtn: false,
+            showRejectedProfileModal: false,
+            rejectedProfileData: null
         }
     },
     methods:{
@@ -50,6 +109,7 @@ const Login={
             // Reset messages
             this.errorMessage = '';
             this.successMessage = '';
+            this.showRejectedProfileBtn = false;
             
             // Validate input
             if (!this.email || !this.password) {
@@ -109,6 +169,10 @@ const Login={
                 } else {
                     // Login failed
                     this.errorMessage = data.message || 'Login failed. Please try again.';
+                    if (data.is_rejected) {
+                        this.showRejectedProfileBtn = true;
+                        this.rejectedProfileData = data.profile;
+                    }
                 }
             } catch(error) {
                 console.error('Login error:', error);
