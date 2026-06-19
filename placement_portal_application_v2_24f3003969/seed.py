@@ -4,7 +4,7 @@ from faker import Faker
 from datetime import datetime, timedelta
 from flask_security.utils import hash_password
 from app import create_app
-from application.extensions import db, user_datastore
+from application.extensions import db, user_datastore, cache
 from application.models import (
     User, StudentProfile, CompanyProfile, PlacementDrives, 
     Application, Interview, Department, DriveTemplate, Placement, SupportQuery, Role, Notification, UserStatusHistory
@@ -25,7 +25,13 @@ def generate_dummy_data(user_datastore):
     fake = Faker()
     print("--- STARTING DATABASE SEEDING ---")
 
-    # --- 1. Clean up existing data ---
+    # --- 1. Clean up existing cache & data ---
+    print("Clearing cache...")
+    try:
+        cache.clear()
+    except Exception as e:
+        print(f"Warning: Could not clear cache (Redis might be offline): {e}")
+        
     print("Clearing existing data...")
     UserStatusHistory.query.delete()
     Placement.query.delete()
@@ -47,8 +53,8 @@ def generate_dummy_data(user_datastore):
     db.session.commit()
 
     now = datetime.now()
-    tomorrow_12am = datetime.combine(now.date() + timedelta(days=1), datetime.min.time())
-    day_after_tomorrow_12am = datetime.combine(now.date() + timedelta(days=2), datetime.min.time())
+    tomorrow_12am = now.date() + timedelta(days=1)
+    day_after_tomorrow_12am = now.date() + timedelta(days=2)
     
     # --- 2. Create Departments ---
     for dept_name in DEPARTMENTS:
@@ -98,12 +104,12 @@ def generate_dummy_data(user_datastore):
 
     #Template-drives
     template1= DriveTemplate(
-        CompanyID=hero_company.id,TemplateName="DS Intern Template",JobTitle="Data Science Intern Template",Type="Internship",
+        CompanyID=hero_company.id,TemplateName="DS Intern Template",JobTitle="Data Science Intern Template",
         JobDescription="<h3>About the Role</h3><p>This is a template for our Data Science Internship positions. The ideal candidate will have a strong foundation in machine learning concepts and practical experience with Python and SQL.</p>",
         Departments=demo_dept,RequiredSkills=demo_skills,WorkMode="onsite",Location="Bangalore",Vacancies=5,noRounds=2,
         InterviewRounds=["Technical", "HR"])
     template2= DriveTemplate(
-        CompanyID=hero_company.id,TemplateName="Software Engineer Job Template",JobTitle="Software Engineer Job Template",Type="Job",
+        CompanyID=hero_company.id,TemplateName="Software Engineer Job Template",JobTitle="Software Engineer Job Template",
         JobDescription="<h3>About the Role</h3><p>This template is for full-time Software Engineer positions. We are looking for candidates with experience in building scalable backend systems and a passion for clean code.</p>",
         Departments=demo_dept,RequiredSkills=demo_skills,WorkMode="hybrid",Location="Hyderabad",Vacancies=10,noRounds=3,
         InterviewRounds=["Coding Test", "Technical", "HR"])
@@ -338,7 +344,7 @@ def generate_dummy_data(user_datastore):
         company = random.choice(companies)
         drive_type = random.choice(["Job", "Internship"])
         num_rounds = random.randint(1, 4)
-        status = random.choices(["Active", "Pending", "Closed", "Rejected"], weights=[60, 15, 20, 5])[0]
+        status = random.choices(["Active", "Pending", "Application Closed", "Rejected"], weights=[60, 15, 20, 5])[0]
         
         posted_date = fake.date_between(start_date='-60d', end_date='today')
         deadline = posted_date + timedelta(days=random.randint(10, 30))
@@ -350,7 +356,7 @@ def generate_dummy_data(user_datastore):
 
     # --- 9. Process Random Workflows ---
     print("Processing random applications for background students...")
-    active_drives = [d for d in drives if d.Status in ['Active', 'Closed']]
+    active_drives = [d for d in drives if d.Status in ['Active', 'Application Closed']]
     applied_pairs = set()
 
     # Ensure Aarav is excluded from random applications

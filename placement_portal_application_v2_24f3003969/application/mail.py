@@ -31,7 +31,7 @@ def send_email(to_address, subject, message, content="html", attachment_file=Non
             part.add_header('Content-Disposition', f'attachment; filename={os.path.basename(attachment_file)}')
             msg.attach(part)
 
-        s = smtplib.SMTP(host=SMTP_SERVER_HOST, port=SMTP_SERVER_PORT)
+        s = smtplib.SMTP(host=SMTP_SERVER_HOST, port=SMTP_SERVER_PORT, timeout=10)
         
         # THE FIX: Only login if we are NOT using local Port 1025
         if SMTP_SERVER_PORT != 2525 and SENDER_PASSWORD:

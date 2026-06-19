@@ -16,7 +16,7 @@ class User(db.Model, UserMixin):
     email = db.Column(db.String(150), unique=True, nullable=False)
     roles = db.relationship('Role', secondary='user_roles')  # e.g., 'Admin', 'Student', 'Company'
     active = db.Column(db.Boolean)
-    disable_note=db.Column(db.Text,nullable=True)
+    note=db.Column(db.Text,nullable=True)
     fs_uniquifier = db.Column(db.String(255), unique=True, nullable=False)
 
     @property
@@ -133,11 +133,10 @@ class DriveTemplate(db.Model):
     Vacancies=db.Column(db.Integer,nullable=False)
     RequiredSkills=db.Column(db.JSON,default=[])
     WorkMode=db.Column(db.String,nullable=False) #remote, hybrid, onsite
-    Type=db.Column(db.String,nullable=False) #Job, Internship
     Location=db.Column(db.String,nullable=False)
     noRounds=db.Column(db.Integer,default=None)
     InterviewRounds=db.Column(db.JSON,default=[])
-    min_cgpa = db.Column(db.Float, default=None) # New field
+    min_cgpa = db.Column(db.Float, default=None)
     CompanyID=db.Column(db.Integer,db.ForeignKey('company_profile.id'),nullable=False)
     company=db.relationship('CompanyProfile',backref='templates',lazy=True)
 
@@ -153,7 +152,7 @@ class PlacementDrives(db.Model):
     InterviewRounds=db.Column(db.JSON,default=[])
     noRounds=db.Column(db.Integer,default=None)
     WorkMode=db.Column(db.String,nullable=False) #remote, hybrid, onsite
-    ApplyDeadline=db.Column(db.DateTime,nullable=False)    
+    ApplyDeadline=db.Column(db.Date,nullable=False)    
     Duration=db.Column(db.String,default=None)
     Status=db.Column(db.String,default="Pending") #Approved,Pending,Rjected,closed
     Type=db.Column(db.String,nullable=False) #Job, Internship
@@ -196,6 +195,35 @@ class Application(db.Model):
     __table_args__=(
         db.UniqueConstraint("student_id","DriveID",name="unique_student_drive"),
     )
+
+    def check_current_eligibility(self):
+        stud = self.student
+        drive = self.drive
+        if not stud or not drive:
+            return True, []
+
+        issues = []
+        
+        # 1. Department Check
+        if drive.Departments:
+            allowed_depts = [d.get('department') if isinstance(d, dict) else str(d) for d in drive.Departments]
+            if stud.department not in allowed_depts:
+                issues.append(f"Department mismatch (Drive requires: {', '.join(allowed_depts)}, Candidate is in: {stud.department})")
+
+        # 2. CGPA Check
+        if drive.min_cgpa and float(stud.cgpa) < drive.min_cgpa:
+            issues.append(f"CGPA below requirement (Drive requires: {drive.min_cgpa}, Candidate has: {stud.cgpa})")
+
+        # 3. Skills Check
+        student_skills = set(s.strip().lower() for s in (stud.skills or "").split(',') if s.strip())
+        drive_skills = set(s.strip().lower() for s in (drive.RequiredSkills or []) if s.strip())
+
+        if drive_skills and not drive_skills.issubset(student_skills):
+            missing_skills = sorted(list(drive_skills - student_skills))
+            issues.append(f"Missing required skills: {', '.join(missing_skills)}")
+
+        is_eligible = len(issues) == 0
+        return is_eligible, issues
 
 class Interview(db.Model):
     __tablename__='interview'

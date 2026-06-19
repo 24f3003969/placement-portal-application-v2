@@ -271,7 +271,7 @@ def generate_offer_letter_task(self, application_id, offer_data):
         <body>
             <p>Hi {student.name} ({student.roll_no}),</p>
             <p>Congratulations! We are pleased to inform you that you have been <strong>Selected</strong> for the <strong>{drive.JobTitle}</strong> position at <strong>{company.company_name}</strong>.</p>
-            <p>Your official offer letter has been generated and is attached to this email. Please review the details of the offer.</p>
+            <p>Your official offer letter has been generated. Please review the details of the offer.</p>
             <p><strong>Key Offer Dates:</strong></p>
             <ul>
                 <li><strong>Offer Expiration Date:</strong> {expiry_date_str}</li>
@@ -366,65 +366,67 @@ def send_company_rejection_email_task(company_id):
         raise e
 
 
-@shared_task(name="send_drive_approval_email")
-def send_drive_approval_email_task(drive_id):
+@shared_task(name="send_drive_status_update_email")
+def send_drive_status_update_email_task(drive_id, status, remark=None):
     """
-    Sends an email to a company when their placement drive is approved.
+    Sends an email to the company regarding drive status updates:
+    Approved, Rejected, Suspended, or Application Closed.
     """
     try:
         drive = PlacementDrives.query.get(drive_id)
         if not drive or not drive.company or not drive.company.user:
-            print(f"Could not find drive or associated company/user for drive_id: {drive_id}")
+            print(f"Could not find drive, company, or user for drive_id: {drive_id}")
             return "Drive, company, or user not found."
 
-        subject = f"Your Placement Drive '{drive.JobTitle}' has been Approved!"
-        
-        html_message = f"""
-        <html>
-        <body>
-            <p>Dear {drive.company.company_name},</p>
-            <p>This is to inform you that your placement drive for the position of <strong>'{drive.JobTitle}'</strong> has been reviewed and approved by the administration.</p>
-            <p>The drive is now active and visible to eligible students. You can monitor applications from your company dashboard.</p>
-            <br>
-            <p>Best Regards,</p>
-            <p>The Placement Portal Team</p>
-        </body>
-        </html>
-        """
+        company = drive.company
+        email = company.user.email
+        job_title = drive.JobTitle
+        company_name = company.company_name
 
-        send_email(drive.company.user.email, subject=subject, message=html_message)
-        return f"Drive approval email for '{drive.JobTitle}' sent to {drive.company.user.email}."
-        
-    except Exception as e:
-        print(f"Error in send_drive_approval_email_task: {e}")
-        raise e
-
-@shared_task(name="send_drive_rejection_email")
-def send_drive_rejection_email_task(drive_id):    
-    try:
-        drive = PlacementDrives.query.get(drive_id)
-        if not drive or not drive.company or not drive.company.user:
-            print(f"Could not find drive or associated company/user for drive_id: {drive_id}")
-            return "Drive, company, or user not found."
-        subject = f"Your Placement Drive '{drive.JobTitle}' has been Rejected"
-        html_message = f"""
-        <html>
-        <body>
-            <p>Dear {drive.company.company_name},</p>
-            <p>We regret to inform you that your placement drive for the position of <strong>'{drive.JobTitle}'</strong> has been reviewed and rejected by the administration.</p>
-            <p>Reason for rejection: <em>{drive.Remark}</em></p>
-            <br>
-            <p>Best Regards,</p>
-            <p>The Placement Portal Team</p>
-        </body>
-        </html>
-        """
-        if send_email(drive.company.user.email, subject=subject, message=html_message):
-            return f"Drive rejection email for '{drive.JobTitle}' sent to {drive.company.user.email}."
+        if status == 'Active':
+            subject = f"Your Placement Drive '{job_title}' has been Approved!"
+            status_text = "Active"
+            body_content = f"<p>This is to inform you that your placement drive for the position of <strong>'{job_title}'</strong> has been reviewed and approved by the administration.</p><p>The drive is now active and visible to eligible students.</p>"
+        elif status == 'Rejected':
+            subject = f"Your Placement Drive '{job_title}' has been Rejected"
+            status_text = "Rejected"
+            reason_str = remark or drive.Remark or "No reason provided."
+            body_content = f"<p>We regret to inform you that your placement drive for the position of <strong>'{job_title}'</strong> has been reviewed and rejected by the administration.</p><p><strong>Reason for rejection:</strong> <em>{reason_str}</em></p>"
+        elif status == 'Suspended':
+            subject = f"Your Placement Drive '{job_title}' has been Suspended"
+            status_text = "Suspended"
+            reason_str = remark or drive.Remark or "No reason provided."
+            body_content = f"<p>We wish to inform you that your placement drive for the position of <strong>'{job_title}'</strong> has been temporarily <strong>suspended</strong> by the administration.</p><p><strong>Reason for suspension:</strong> <em>{reason_str}</em></p><p>While suspended, students will not be able to view or apply to this drive, and scheduled interviews have been put on hold.</p>"
+        elif status == 'Application Closed':
+            subject = f"Your Placement Drive '{job_title}' is now Closed"
+            status_text = "Application Closed"
+            reason_str = remark or drive.Remark or "No reason provided."
+            body_content = f"<p>We wish to inform you that your placement drive for the position of <strong>'{job_title}'</strong> has been <strong>Closed</strong> by the administrator.</p><p><strong>Closing note/reason:</strong> <em>{reason_str}</em></p><p>No new applications will be accepted for this position.</p>"
         else:
-            raise Exception(f"Failed to send drive rejection email for drive ID {drive_id}.")
+            subject = f"Placement Drive '{job_title}' Status Updated"
+            status_text = status
+            body_content = f"<p>Your placement drive for the position of <strong>'{job_title}'</strong> has been updated to status: <strong>{status}</strong>.</p>"
+
+        html_message = f"""
+        <html>
+        <body>
+            <p>Dear {company_name},</p>
+            {body_content}
+            <p>You can check the details by logging into your company dashboard: <a href="http://127.0.0.1:5000/login">Login to Portal</a></p>
+            <br>
+            <p>Best Regards,</p>
+            <p>The Placement Portal Team</p>
+        </body>
+        </html>
+        """
+
+        if send_email(email, subject=subject, message=html_message):
+            return f"Drive status update email ({status_text}) sent to {email}."
+        else:
+            raise Exception(f"Failed to send email to {email}.")
+
     except Exception as e:
-        print(f"Error in send_drive_rejection_email_task: {e}")
+        print(f"Error in send_drive_status_update_email_task: {e}")
         raise e
 
 @shared_task(name="send_application_rejection_revoke_email")
@@ -468,12 +470,17 @@ def send_application_status_update_email_task(application_id):
         
         subject = f"Application Status Update: {drive.JobTitle}"
         application_url = "http://127.0.0.1:5000/login"
+        
+        display_reason = application.rejection_reason
+        if display_reason == "due to bulk rejection on closing the round":
+            display_reason = "Position closed"
+
         html_message = f"""
         <html>
         <body>
             <p>Hi {student.name} ({student.roll_no}),</p>
             <p>Your application status for the position of <strong>{drive.JobTitle}</strong> at <strong>{drive.company_name}</strong> has been updated to <strong>{application.status}</strong>.</p>
-            {"<p><strong>Reason / Remarks:</strong> " + application.rejection_reason + "</p>" if application.rejection_reason else ""}
+            {"<p><strong>Reason / Remarks:</strong> " + display_reason + "</p>" if display_reason else ""}
             <p>Please log in to the placement portal to view your dashboard: <a href="{application_url}">Login</a></p>
             <br>
             <p>Best Regards,</p>
@@ -685,7 +692,7 @@ def generate_daily_reminders_task(self):
         # Find drives with deadlines of tomorrow or the day after
         drives_with_upcoming_deadlines = PlacementDrives.query.filter(
             func.date(PlacementDrives.ApplyDeadline).in_([str(tomorrow), str(next_day)]),
-            PlacementDrives.Status.in_(['Active', 'Approved'])
+            PlacementDrives.Status == 'Active'
         ).all()
 
         reminders_sent = 0
@@ -732,32 +739,60 @@ def generate_daily_reminders_task(self):
 @shared_task(name="close_specific_drive")
 def close_specific_drive_task(drive_id):
     drive = PlacementDrives.query.get(drive_id)
-    if drive and drive.Status in ['Active', 'Approved']:
+    if drive and drive.Status == 'Active':
         drive.Status = 'Application Closed'
+        
+        from application.tasks import send_drive_status_update_email_task
+        send_drive_status_update_email_task.delay(drive.DriveID, 'Application Closed', 'Application deadline reached.')
+        
+        msg = f"Your placement drive '{drive.JobTitle}' has been closed because the application deadline was reached."
+        if Notification.should_notify(msg):
+            new_notif = Notification(
+                user_id=drive.company.user_id,
+                message=msg,
+                type="warning"
+            )
+            db.session.add(new_notif)
+            
         db.session.commit()
         cache.clear()
         return f"Drive ID {drive_id} has been marked as Application Closed."
     else:
-        return f"Drive ID {drive_id} not found or not active/approved."
+        return f"Drive ID {drive_id} not found or not active."
         
 @shared_task(name="sweep_expired_drives")
 def sweep_expired_drives_task():
-    now = datetime.now()
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo('Asia/Kolkata')).date()
     
-    # Find all drives that are still marked Active/Approved but have passed their deadline
+    # Find all drives that are still marked Active or Pending but have passed their deadline
     expired_drives = PlacementDrives.query.filter(
-        PlacementDrives.Status.in_(['Active', 'Approved']),
+        PlacementDrives.Status.in_(['Active', 'Pending']),
         PlacementDrives.ApplyDeadline != None,
-        PlacementDrives.ApplyDeadline <= now
+        PlacementDrives.ApplyDeadline < today
     ).all()
     
     if not expired_drives:
         return "No expired drives to close."
         
     count = 0
+    from application.tasks import send_drive_status_update_email_task
     for drive in expired_drives:
+        orig_status = drive.Status
         drive.Status = 'Application Closed'
         count += 1
+        
+        remark = 'Application deadline reached.' if orig_status == 'Active' else 'Application deadline passed before approval.'
+        send_drive_status_update_email_task.delay(drive.DriveID, 'Application Closed', remark)
+        
+        msg = f"Your placement drive '{drive.JobTitle}' has been closed because the application deadline was reached."
+        if Notification.should_notify(msg):
+            new_notif = Notification(
+                user_id=drive.company.user_id,
+                message=msg,
+                type="warning"
+            )
+            db.session.add(new_notif)
         
     db.session.commit()
     cache.clear()
@@ -1008,41 +1043,9 @@ def cleanup_old_notifications_task():
         raise e
 
 
-@shared_task(name="send_student_suspension_email")
-def send_student_suspension_email_task(user_id, note):
-    try:
-        user = User.query.get(user_id)
-        if not user or not user.email:
-            print(f"Could not find user or email for user_id: {user_id}")
-            return "User or email not found."
-        
-        subject = "Account Suspended - University Placement Portal"
-        html_message = f"""
-        <html>
-        <body>
-            <p>Hi,</p>
-            <p>We want to inform you that your placement account has been temporarily <strong>suspended</strong> by the administrator.</p>
-            <p><strong>Reason for suspension:</strong> {note if note else 'No reason provided.'}</p>
-            <p>While suspended, you will not be able to log in or apply for drives, and your current applications and scheduled interviews have been put on hold.</p>
-            <p>Please contact the Placement Cell/Administrator if you believe this is in error.</p>
-            <br>
-            <p>Best Regards,</p>
-            <p>The Placement Portal Team</p>
-        </body>
-        </html>
-        """
-        if send_email(user.email, subject=subject, message=html_message):
-            return f"Suspension email sent to {user.email}."
-        else:
-            raise Exception(f"Failed to send email to {user.email}")
-    except Exception as e:
-        print(f"Error in send_student_suspension_email_task: {e}")
-        traceback.print_exc()
-        raise e
-
 
 @shared_task(name="send_student_reactivation_email")
-def send_student_reactivation_email_task(user_id):
+def send_student_reactivation_email_task(user_id, note=None):
     try:
         user = User.query.get(user_id)
         if not user or not user.email:
@@ -1050,11 +1053,20 @@ def send_student_reactivation_email_task(user_id):
             return "User or email not found."
         
         subject = "Account Reactivated - University Placement Portal"
+        note_section = ""
+        if note:
+            note_section = f"""
+            <p><strong>Reactivation Note:</strong></p>
+            <blockquote style="background-color: #f3f4f6; border-left: 4px solid #10b981; padding: 10px; margin: 10px 0;">
+                {note}
+            </blockquote>
+            """
         html_message = f"""
         <html>
         <body>
             <p>Hi,</p>
             <p>We are pleased to inform you that your placement account has been <strong>reactivated</strong> by the administrator.</p>
+            {note_section}
             <p>Your access has been fully restored. You can now log in, review your applications, and participate in placement drives.</p>
             <p>Click here to log in: <a href="http://127.0.0.1:5000/login">Placement Portal Login</a></p>
             <br>
@@ -1071,3 +1083,114 @@ def send_student_reactivation_email_task(user_id):
         print(f"Error in send_student_reactivation_email_task: {e}")
         traceback.print_exc()
         raise e
+
+
+@shared_task(name="send_student_disabled_email")
+def send_student_disabled_email_task(user_id, note):
+    try:
+        user = User.query.get(user_id)
+        if not user or not user.email:
+            print(f"Could not find user or email for user_id: {user_id}")
+            return "User or email not found."
+        
+        student = StudentProfile.query.filter_by(user_id=user.id).first()
+        student_name = student.name if student else "Student"
+        
+        subject = "Account Disabled - University Placement Portal"
+        html_message = f"""
+        <html>
+        <body>
+            <p>Dear {student_name},</p>
+            <p>We regret to inform you that your student placement account has been <strong>disabled</strong> by the administrator.</p>
+            <p><strong>Reason for disablement (Disable Note):</strong></p>
+            <blockquote style="background-color: #f3f4f6; border-left: 4px solid #ef4444; padding: 10px; margin: 10px 0;">
+                {note if note else 'No reason provided.'}
+            </blockquote>
+            <p>While your account is disabled, you will not be able to access the placement portal or participate in any placement drives. Any current applications and scheduled interviews have been suspended.</p>
+            <p>If you have any questions or wish to appeal this decision, please contact the Placement Cell.</p>
+            <br>
+            <p>Best Regards,</p>
+            <p>The Placement Portal Team</p>
+        </body>
+        </html>
+        """
+        if send_email(user.email, subject=subject, message=html_message):
+            return f"Disable email sent to student {user.email}."
+        else:
+            raise Exception(f"Failed to send disable email to student {user.email}")
+    except Exception as e:
+        print(f"Error in send_student_disabled_email_task: {e}")
+        traceback.print_exc()
+        raise e
+
+
+@shared_task(name="send_company_disabled_email")
+def send_company_disabled_email_task(company_id, note):
+    try:
+        company = CompanyProfile.query.get(company_id)
+        if not company or not company.user or not company.user.email:
+            print(f"Could not find company or email for company_id: {company_id}")
+            return "Company or email not found."
+        
+        subject = "Company Account Disabled - Placement Portal"
+        html_message = f"""
+        <html>
+        <body>
+            <p>Dear {company.company_name},</p>
+            <p>We regret to inform you that your company account on the Placement Portal has been <strong>disabled</strong> by the administrator.</p>
+            <p><strong>Reason for disablement (Disable Note):</strong></p>
+            <blockquote style="background-color: #f3f4f6; border-left: 4px solid #ef4444; padding: 10px; margin: 10px 0;">
+                {note if note else 'No reason provided.'}
+            </blockquote>
+            <p>Consequently, your access to the company dashboard has been revoked, and your active placement drives and scheduled interviews have been suspended.</p>
+            <p>If you believe this is an error or would like to discuss this further, please contact the placement administration team.</p>
+            <br>
+            <p>Best Regards,</p>
+            <p>The Placement Portal Team</p>
+        </body>
+        </html>
+        """
+        if send_email(company.user.email, subject=subject, message=html_message):
+            return f"Disable email sent to company {company.user.email}."
+        else:
+            raise Exception(f"Failed to send disable email to company {company.user.email}")
+    except Exception as e:
+        print(f"Error in send_company_disabled_email_task: {e}")
+        traceback.print_exc()
+        raise e
+
+@shared_task(name="send_company_reactivated_email")
+def send_company_reactivated_email_task(company_id, note):
+    try:
+        company = CompanyProfile.query.get(company_id)
+        if not company or not company.user or not company.user.email:
+            print(f"Could not find company or email for company_id: {company_id}")
+            return "Company or email not found."
+        
+        subject = "Company Account Reactivated - Placement Portal"
+        html_message = f"""
+        <html>
+        <body>
+            <p>Dear {company.company_name},</p>
+            <p>We are pleased to inform you that your company account on the Placement Portal has been <strong>reactivated</strong> by the administrator.</p>
+            <p><strong>Reactivation Note:</strong></p>
+            <blockquote style="background-color: #f3f4f6; border-left: 4px solid #10b981; padding: 10px; margin: 10px 0;">
+                {note if note else 'Your account has been enabled.'}
+            </blockquote>
+            <p>You can now log in to your dashboard and manage your placement drives as usual.</p>
+            <p>You can access the portal here: <a href="http://127.0.0.1:5000/login">Login to Portal</a></p>
+            <br>
+            <p>Best Regards,</p>
+            <p>The Placement Portal Team</p>
+        </body>
+        </html>
+        """
+        if send_email(company.user.email, subject=subject, message=html_message):
+            return f"Reactivation email sent to company {company.user.email}."
+        else:
+            raise Exception(f"Failed to send reactivation email to company {company.user.email}")
+    except Exception as e:
+        print(f"Error in send_company_reactivated_email_task: {e}")
+        traceback.print_exc()
+        raise e
+    

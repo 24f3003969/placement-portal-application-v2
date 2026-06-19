@@ -44,6 +44,14 @@ def create_view(app,user_datastore: SQLAlchemyUserDatastore):
         role=user.roles[0].name if user.roles else None
         # Check if user is active
         if not user.active:
+            if role == 'comp':
+                company = CompanyProfile.query.filter_by(user_id=user.id).first()
+                if company and not company.is_approved:
+                    return jsonify({
+                        "message": "Your profile has been rejected. Email support if you want to correct any detail (provide corrected details with field name) or <a href='#/contact_support' class='alert-link'>contact support</a>.",
+                        "is_rejected": True,
+                        "profile": company.to_dict()
+                    }), 401
             return jsonify({"message":"Your account has been deactivated. Please contact admin."}),401
         
         login_user(user)
