@@ -189,21 +189,13 @@ const PlacementDrives = {
             });
 
             // --- 2. TOGGLE FILTER: Skill Matching ---
-            // If toggled ON, student must match at least 2 skills (or all if the drive requires < 2)
+            // If toggled ON, student must match all required skills (strict alignment with eligibility check)
             if (this.isEligible) {
                 const mySkills = Array.isArray(this.profile.skills) ? this.profile.skills.map(s => s.toLowerCase().trim()) : [];
                 results = results.filter(drive => {
                     const requiredSkills = Array.isArray(drive.RequiredSkills) ? drive.RequiredSkills.map(s => s.toLowerCase().trim()) : [];
                     if (requiredSkills.length === 0) return true; // Drive has no specific skill requirements
-                    
-                    let matchCount = 0;
-                    requiredSkills.forEach(reqSkill => {
-                        if (mySkills.includes(reqSkill)) matchCount++;
-                    });
-                    
-                    // Requires 2 matches, or 1 if the drive only asks for 1
-                    const requiredMatches = Math.min(2, requiredSkills.length);
-                    return matchCount >= requiredMatches;
+                    return requiredSkills.every(reqSkill => mySkills.includes(reqSkill));
                 });
             }
 

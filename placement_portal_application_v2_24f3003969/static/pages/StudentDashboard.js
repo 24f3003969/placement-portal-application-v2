@@ -77,16 +77,21 @@ const StudentDashboard = {
 
         <div class="row mt-3">
             <div class="col-md-8">
-                <div v-if="nextEvent" class="card shadow-sm border-0 mb-3 bg-primary bg-gradient text-white">
+                <div v-if="nextEvent" class="card shadow-sm border-0 mb-3 bg-gradient text-white" :class="nextEvent.status === 'suspended' ? 'bg-warning text-dark' : 'bg-primary'">
                     <div class="card-body p-3 d-flex align-items-center justify-content-between gap-3">
                         <div>
                             <div class="d-flex align-items-center mb-1">
-                                <i class="bi bi-bell-fill text-warning me-2 fs-6"></i>
-                                <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.7rem; letter-spacing: 1px;">Up Next</span>
+                                <i class="bi bi-bell-fill me-2 fs-6" :class="nextEvent.status === 'suspended' ? 'text-danger' : 'text-warning'"></i>
+                                <span class="text-uppercase fw-bold" :class="nextEvent.status === 'suspended' ? 'text-dark opacity-75' : 'text-white-50'" style="font-size: 0.7rem; letter-spacing: 1px;">
+                                    {{ nextEvent.status === 'suspended' ? 'TEMPORARILY ON HOLD' : 'Up Next' }}
+                                </span>
                             </div>
-                            <h6 class="fw-bold mb-1">{{ nextEvent.drive.company_name }} <span class="fw-normal fs-6 opacity-75">| {{ nextEvent.drive.JobTitle }}</span></h6>
-                            <p class="mb-2 small"><strong>Round {{ nextEvent.round_no }}:</strong> {{ nextEvent.round_name }}</p>
-                            <div v-if="nextEvent.location_or_link">
+                            <h6 class="fw-bold mb-1 text-white" :class="nextEvent.status === 'suspended' ? 'text-dark' : 'text-white'">{{ nextEvent.drive.company_name }} <span class="fw-normal fs-6 opacity-75">| {{ nextEvent.drive.JobTitle }}</span></h6>
+                            <p class="mb-2 small opacity-75" :class="nextEvent.status === 'suspended' ? 'text-dark' : 'text-white'"><strong>Round {{ nextEvent.round_no }}:</strong> {{ nextEvent.round_name }}</p>
+                            <div v-if="nextEvent.status === 'suspended'">
+                                <span class="small fw-bold text-danger"><i class="bi bi-pause-circle-fill me-1"></i>Interview Paused (Drive Suspended)</span>
+                            </div>
+                            <div v-else-if="nextEvent.location_or_link">
                                 <span v-if="nextEvent.datetime" class="small">{{formatDateTime(nextEvent.datetime, true)}}</span>
                                 <a v-if="isUrl(nextEvent.location_or_link)" :href="nextEvent.location_or_link" target="_blank" class="btn btn-sm btn-light fw-bold rounded-pill px-3 shadow-sm text-primary" style="font-size: 0.8rem;">
                                     Join Meeting <i class="bi bi-camera-video-fill ms-1"></i>
@@ -236,7 +241,7 @@ const StudentDashboard = {
     computed: {
         stats() {
             const activeApps = this.applications.filter(app => !app.rejection_reason && ['Pending', 'Shortlisted', 'Selected'].includes(app.status));
-            const upcomingInterviews = this.interviews.filter(i => new Date(i.datetime) > new Date() && i.status === 'scheduled');
+            const upcomingInterviews = this.interviews.filter(i => new Date(i.datetime) > new Date() && (i.status === 'scheduled' || i.status === 'suspended'));
             const hired = this.applications.filter(app => app.status === 'Hired');
             return {
                 appliedCount: activeApps.length,
@@ -246,7 +251,7 @@ const StudentDashboard = {
         },
         nextEvent() {
             const upcoming = this.interviews
-                .filter(i => new Date(i.datetime) > new Date() && i.status === 'scheduled')
+                .filter(i => new Date(i.datetime) > new Date() && (i.status === 'scheduled' || i.status === 'suspended'))
                 .sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
             return upcoming.length > 0 ? upcoming[0] : null;
         },
@@ -312,12 +317,12 @@ const StudentDashboard = {
             const p = this.profile;
             if (!p || Object.keys(p).length === 0) return { score: 0, missing: ['Profile data loading...'] };
 
-            if (p.resume) score += 20; else missing.push('Resume');
+            if (p.resume) score += 10; else missing.push('Resume');
             if (p.linkedin) score += 15; else missing.push('LinkedIn Profile');
             if (p.github) score += 15; else missing.push('GitHub Profile');
             if (p.certificates_link) score += 10; else missing.push('Certificates');
             if (p.profile_pic && !p.profile_pic.includes('default')) score += 10; else missing.push('Profile Picture');
-            
+            if (p.about_me) score += 10; else missing.push('About Me');
             const skills = Array.isArray(p.skills) ? p.skills : [];
             if (skills.length >= 3) score += 30;
             else if (skills.length > 0) { score += 15; missing.push('More Skills (add at least 3)'); }

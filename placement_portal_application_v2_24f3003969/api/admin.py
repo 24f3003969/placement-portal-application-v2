@@ -13,7 +13,7 @@ from application.models import (
     Application, CompanyProfile, PlacementDrives, StudentProfile,
     Interview, User, Department, SupportQuery, Placement, UserStatusHistory
 )
-from .shared import create_notification, placement_drive_fields
+from .shared import create_notification, placement_drive_fields, get_ist_now, get_ist_date
 from .student import student_app_fields
 
 admin_bp = Blueprint('admin_api', __name__)
@@ -122,6 +122,7 @@ class AdminDashboardAPI(Resource):
     def get(self):
         from .shared import run_expired_drives_sweep
         run_expired_drives_sweep()
+        now_local = get_ist_now()
         # 1. Real-Time Pulse (Header Stats)
         active_students_count = StudentProfile.query.join(User).filter(User.active == True).count()
         active_companies_count = CompanyProfile.query.join(User).filter(User.active == True, CompanyProfile.is_approved == True).count()
@@ -200,12 +201,10 @@ class AdminDashboardAPI(Resource):
         }
 
         # 4. Urgent Queue (Right Column)
-        from zoneinfo import ZoneInfo
-        now_local = datetime.now(ZoneInfo('Asia/Kolkata')).replace(tzinfo=None)
         all_urgent_drive_approvals_query = PlacementDrives.query.filter(
             PlacementDrives.Status == 'Pending', 
             PlacementDrives.ApplyDeadline != None, 
-            PlacementDrives.ApplyDeadline > now_local
+            PlacementDrives.ApplyDeadline >= get_ist_date()
         ).order_by(PlacementDrives.ApplyDeadline.asc())
 
         all_urgent_drive_approvals = all_urgent_drive_approvals_query.all()
@@ -218,7 +217,7 @@ class AdminDashboardAPI(Resource):
         system_alerts = [{"id": d.DriveID, "message": f"Drive '{d.JobTitle}' has 0 applicants."} for d in drives_with_zero_applicants]
 
         # Add new offer alerts to system_alerts
-        seven_days_ago = datetime.now().date() - timedelta(days=7)
+        seven_days_ago = get_ist_date() - timedelta(days=7)
         delayed_offers_query = db.session.query(
             Application.DriveID,
             func.count(Application.id).label('student_count')
@@ -243,7 +242,7 @@ class AdminDashboardAPI(Resource):
         top_upcoming_drives = PlacementDrives.query.options(joinedload(PlacementDrives.company)).filter(
             PlacementDrives.Status.in_(['Active', 'Pending']),
             PlacementDrives.ApplyDeadline != None, 
-            PlacementDrives.ApplyDeadline > now_local
+            PlacementDrives.ApplyDeadline >= get_ist_date()
         ).order_by(PlacementDrives.ApplyDeadline.asc()).limit(3).all()
 
         total_active_students = StudentProfile.query.join(User).filter(User.active == True).count()
@@ -263,11 +262,11 @@ class AdminDashboardAPI(Resource):
                         })
 
         # Insight 2: Engagement
-        forty_eight_hours_later = now_local + timedelta(hours=48)
+        forty_eight_hours_later = get_ist_date() + timedelta(days=2)
         drives_closing_soon = PlacementDrives.query.filter(
             PlacementDrives.Status == 'Active',
             PlacementDrives.ApplyDeadline != None, 
-            PlacementDrives.ApplyDeadline > now_local,
+            PlacementDrives.ApplyDeadline >= get_ist_date(),
             PlacementDrives.ApplyDeadline <= forty_eight_hours_later
         ).all()
 
@@ -396,7 +395,7 @@ class AdminCompanyManagementAPI(Resource):
         
         companies = query.order_by(CompanyProfile.id.desc()).all()
 
-        delay_threshold_date = datetime.now() - timedelta(days=14)
+        delay_threshold_date = get_ist_now() - timedelta(days=14)
         DELAY_SENSITIVITY_COUNT = 5
 
         for company in companies:
@@ -466,6 +465,7 @@ class AdminCompanyManagementAPI(Resource):
                 PlacementDrives.CompanyID == company.id,
                 PlacementDrives.Status == 'Active'
             ).all()
+            from application.tasks import send_drive_suspension_emails_to_students_task
             for drive in active_drives:
                 drive.Status = 'Suspended'
                 # Notify applicants
@@ -476,13 +476,14 @@ class AdminCompanyManagementAPI(Resource):
                         f"The placement drive '{drive.JobTitle}' has been suspended temporarily.",
                         "warning"
                     )
+                send_drive_suspension_emails_to_students_task.delay(drive.DriveID)
             
             # Suspend upcoming scheduled interviews
             drive_ids = [d.DriveID for d in company.drives]
             if drive_ids:
                 upcoming_interviews = Interview.query.join(Application).filter(
                     Application.DriveID.in_(drive_ids),
-                    Interview.datetime > datetime.now(),
+                    Interview.datetime > get_ist_now(),
                     Interview.status == 'scheduled'
                 ).all()
                 for interview in upcoming_interviews:
@@ -684,7 +685,7 @@ class AdminHiredInsightsAPI(Resource):
                 PlacementDrives.Type == 'Job',
                 PlacementDrives.Salary.isnot(None),
                 PlacementDrives.Salary != '',
-                Application.selected_date >= (datetime.now() - timedelta(days=365))
+                Application.selected_date >= (get_ist_date() - timedelta(days=365))
             ).scalar()
         highest_package = round(float(highest_package_scalar), 2) if highest_package_scalar else 0.0
         average_package_scalar = db.session.query(
@@ -696,7 +697,7 @@ class AdminHiredInsightsAPI(Resource):
                 PlacementDrives.Type == 'Job',
                 PlacementDrives.Salary.isnot(None),
                 PlacementDrives.Salary != '',
-                Application.selected_date >= (datetime.now() - timedelta(days=365))
+                Application.selected_date >= (get_ist_date() - timedelta(days=365))
             ).scalar()
         average_package = round(float(average_package_scalar), 2) if average_package_scalar else 0.0
 
@@ -850,7 +851,7 @@ class AdminStudentManagementAPI(Resource):
                 # Soft suspension of upcoming scheduled interviews
                 upcoming_interviews = Interview.query.join(Application).filter(
                     Application.student_id == profile.id,
-                    Interview.datetime > datetime.now(),
+                    Interview.datetime > get_ist_now(),
                     Interview.status == 'scheduled'
                 ).all()
                 for interview in upcoming_interviews:
@@ -1057,7 +1058,7 @@ class AdminManageDrivesAPI(Resource):
         drive.RejectionDate = None
         if status == 'Rejected':
             drive.Remark = remarks
-            drive.RejectionDate = datetime.now().date()
+            drive.RejectionDate = get_ist_date()
         elif status in ['Suspended', 'Application Closed']:
             drive.Remark = remarks
 
@@ -1085,6 +1086,32 @@ class AdminManageDrivesAPI(Resource):
         elif status == 'Suspended':
             send_drive_status_update_email_task.delay(drive.DriveID, 'Suspended', remarks)
             create_notification(drive.company.user_id, f"Your placement drive '{drive.JobTitle}' has been suspended by the administrator. Reason: {remarks or 'No reason provided.'}", "warning")
+            
+            # Notify all applicants
+            applications = Application.query.filter_by(DriveID=drive.DriveID).all()
+            from application.tasks import send_drive_suspension_emails_to_students_task
+            for app in applications:
+                create_notification(
+                    app.student.user_id,
+                    f"The placement drive '{drive.JobTitle}' has been suspended temporarily.",
+                    "warning"
+                )
+            send_drive_suspension_emails_to_students_task.delay(drive.DriveID)
+            
+            # Suspend upcoming scheduled interviews
+            upcoming_interviews = Interview.query.join(Application).filter(
+                Application.DriveID == drive.DriveID,
+                Interview.datetime > get_ist_now(),
+                Interview.status == 'scheduled'
+            ).all()
+            for interview in upcoming_interviews:
+                interview.previous_status = interview.status
+                interview.status = 'suspended'
+                create_notification(
+                    interview.application.student.user_id,
+                    f"Your interview for '{interview.application.drive.JobTitle}' on '{interview.datetime}' has been suspended temporarily.",
+                    "warning"
+                )
         elif status == 'Application Closed':
             send_drive_status_update_email_task.delay(drive.DriveID, 'Application Closed', remarks)
             create_notification(drive.company.user_id, f"Your placement drive '{drive.JobTitle}' has been closed by the administrator. Reason: {remarks or 'No reason provided.'}", "warning")
@@ -1167,7 +1194,7 @@ class AdminSupportQueriesAPI(Resource):
         
         query.response = args['response']
         query.status = args['status']
-        query.responded_at = datetime.now()
+        query.responded_at = get_ist_now()
         create_notification(query.user_id, f"Support query answered: Your support query has been resolved by the administrator. Status: {query.status}.", "success")
         db.session.commit()
         from application.tasks import send_support_query_response_email_task

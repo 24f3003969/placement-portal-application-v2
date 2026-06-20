@@ -144,7 +144,7 @@ const StudentResource = {
         statusBadgeClass(status) {
             switch (status) {
                 case 'Active': return 'bg-success';
-                case 'Pending': return 'bg-warning text-dark';
+                case 'Pending': return 'bg-info text-dark';
                 case 'Suspended': return 'bg-warning text-dark';
                 case 'Rejected':
                 case 'Application Closed': return 'bg-danger';

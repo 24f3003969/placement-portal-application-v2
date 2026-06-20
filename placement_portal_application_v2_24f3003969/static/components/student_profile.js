@@ -160,12 +160,18 @@ const StudentProfile = {
                             <div class="col-md-6" v-if="!isAdminView">
                                 <label class="form-label small fw-bold">Resume Upload (PDF)</label>
                                 <input type="file" accept=".pdf,.doc,.docx" class="form-control" @change="changeResume">
-                                <small v-if="profile.resume" class="text-success mt-1 d-block"><i class="bi bi-check-circle-fill me-1"></i> Resume currently uploaded</small>
+                                <div v-if="profile.resume" class="mt-1 d-flex align-items-center">
+                                    <a :href="'/' + profile.resume" target="_blank" class="text-success text-decoration-none small fw-semibold"><i class="bi bi-file-earmark-pdf-fill me-1"></i>View Current Resume</a>
+                                    <button type="button" class="btn btn-link btn-sm text-danger p-0 ms-3 align-baseline small text-decoration-none" @click="removeResume()"><i class="bi bi-trash3-fill me-1"></i>Remove</button>
+                                </div>
                             </div>
                             <div class="col-md-6" v-if="!isAdminView">
                                 <label class="form-label small fw-bold">Profile Picture</label>
                                 <input type="file" accept="image/*" class="form-control" @change="changePicture">
-                                <small v-if="profile.profile_pic && !profile.profile_pic.includes('default')" class="text-success mt-1 d-block"><i class="bi bi-check-circle-fill me-1"></i> Custom picture currently uploaded</small>
+                                <div v-if="profile.profile_pic && !profile.profile_pic.includes('default')" class="mt-1 d-flex align-items-center">
+                                    <a :href="'/' + profile.profile_pic" target="_blank" class="text-success text-decoration-none small fw-semibold"><i class="bi bi-image-fill me-1"></i>View Current Picture</a>
+                                    <button type="button" class="btn btn-link btn-sm text-danger p-0 ms-3 align-baseline small text-decoration-none" @click="removePicture()"><i class="bi bi-trash3-fill me-1"></i>Remove</button>
+                                </div>
                             </div>
                         </div>
                         <hr class="my-4">
@@ -412,6 +418,42 @@ const StudentProfile = {
             formData.append('profile_pic', this.newPicture);
             const res = await fetch('/api/profile_pic', { method: 'POST', headers: { 'Authentication-Token': localStorage.getItem('token') }, body: formData });
             if (res.ok) { const data = await res.json(); this.profile.profile_pic = data.path; this.newPicture = null; }
+        },
+        async removeResume() {
+            if (!confirm("Are you sure you want to remove your current resume?")) return;
+            try {
+                const res = await fetch('/api/student_resume', {
+                    method: 'DELETE',
+                    headers: { 'Authentication-Token': localStorage.getItem('token') }
+                });
+                if (res.ok) {
+                    alert("Resume removed successfully!");
+                    this.profile.resume = null;
+                } else {
+                    const err = await res.json();
+                    alert(err.message || "Failed to remove resume.");
+                }
+            } catch (error) {
+                console.error("Error removing resume:", error);
+            }
+        },
+        async removePicture() {
+            if (!confirm("Are you sure you want to remove your profile picture?")) return;
+            try {
+                const res = await fetch('/api/profile_pic', {
+                    method: 'DELETE',
+                    headers: { 'Authentication-Token': localStorage.getItem('token') }
+                });
+                if (res.ok) {
+                    alert("Profile picture removed successfully!");
+                    this.profile.profile_pic = null;
+                } else {
+                    const err = await res.json();
+                    alert(err.message || "Failed to remove profile picture.");
+                }
+            } catch (error) {
+                console.error("Error removing profile picture:", error);
+            }
         },
         async generateReport() {
             this.reportLoading = true;

@@ -12,7 +12,7 @@ from application.extensions import db, cache
 from application.models import (
     Application, StudentProfile, PlacementDrives, Interview, Placement
 )
-from .shared import create_notification, format_date
+from .shared import create_notification, format_date, get_ist_now, get_ist_date
 
 student_bp = Blueprint('student_api', __name__)
 student_api = Api(student_bp)
@@ -28,6 +28,9 @@ apply_parser.add_argument('availability_remarks', type=str, location='form', req
 apply_drive_files = {
     'resume': fields.String,
     'status': fields.String,
+    'available_immediately': fields.Boolean,
+    'available_from': fields.String(attribute=lambda x: x.available_from.isoformat() if x.available_from else None),
+    'availability_remarks': fields.String,
 }
 
 interview_round_fields = {
@@ -41,7 +44,7 @@ interview_round_fields = {
 }
 
 student_parser = reqparse.RequestParser()
-student_parser.add_argument('resume', type=FileStorage, location='files', required=True)
+student_parser.add_argument('resume', type=FileStorage, location='files', required=False)
 student_parser.add_argument('name', type=str, location='form', required=True, help="name is required")
 student_parser.add_argument('roll_no', type=str, location='form', required=True, help="roll_no is required")
 student_parser.add_argument('phone', type=str, location='form', required=True, help="phone no is required")
@@ -76,7 +79,7 @@ student_app_fields = {
     'status': fields.String,
     'is_currently_eligible': fields.Boolean(attribute=lambda x: x.check_current_eligibility()[0]),
     'eligibility_issues': fields.Raw(attribute=lambda x: x.check_current_eligibility()[1]),
-    'is_offer_expired': fields.Boolean(attribute=lambda x: (x.placement.offer_expiry_date < datetime.now().date()) if (x.placement and x.placement.offer_expiry_date) else False),
+    'is_offer_expired': fields.Boolean(attribute=lambda x: (x.placement.offer_expiry_date < get_ist_date()) if (x.placement and x.placement.offer_expiry_date) else False),
     'application_date': fields.String(attribute=lambda x: x.application_datetime.isoformat() if getattr(x, 'application_datetime', None) else None),
     'application_datetime': fields.String(attribute=lambda x: x.application_datetime.isoformat() if x.application_datetime else None), # The full ISO timestamp
     'offer_letter': fields.String(attribute=lambda x: x.placement.offer_letter if x.placement else None),
@@ -84,6 +87,9 @@ student_app_fields = {
     'offer_expiry_date': fields.String(attribute=lambda x: x.placement.offer_expiry_date.isoformat() if x.placement and x.placement.offer_expiry_date else None),
     'offer_sent_date': fields.String(attribute=lambda x: x.placement.offer_sent_date.isoformat() if x.placement and x.placement.offer_sent_date else None),
     'joining_date': fields.String(attribute=lambda x: x.placement.joining_date.isoformat() if x.placement and x.placement.joining_date else None),
+    'available_immediately': fields.Boolean,
+    'available_from': fields.String(attribute=lambda x: x.available_from.isoformat() if x.available_from else None),
+    'availability_remarks': fields.String,
     'drive': fields.Nested({
         'DriveID': fields.Integer,
         'JobTitle': fields.String,
@@ -100,11 +106,13 @@ student_app_fields = {
         'WorkMode': fields.String,
         'min_cgpa': fields.Float,
         'Departments': fields.Raw,
+        'Status': fields.String,
     })
 }
 
 student_interview_fields = {
     'interview_id': fields.Integer(attribute='id'),
+    'application_id': fields.Integer,
     'round_no': fields.Integer,
     'round_name': fields.String,
     'datetime': fields.String(attribute=lambda x: x.datetime.isoformat() if x.datetime else None),
@@ -150,7 +158,6 @@ class ApplyForDrive(Resource):
             if not stud:
                 return {"message": "Please complete your profile first"}, 400
 
-            # --- START of new validation ---
             # Check if student is already hired for a JOB
             is_hired_for_job = Application.query.join(PlacementDrives).filter(
                 Application.student_id == stud.id,
@@ -160,15 +167,13 @@ class ApplyForDrive(Resource):
 
             if is_hired_for_job:
                 return {"message": "You have already secured a job placement and cannot apply for new drives."}, 403
-            # --- END of new validation ---
 
             drive = PlacementDrives.query.get(drive_id)
             if not drive:
                 return {"message": "Drive not found"}, 404
 
             # Verify if the drive is closed or deadline has passed
-            from zoneinfo import ZoneInfo
-            today_kolkata = datetime.now(ZoneInfo('Asia/Kolkata')).date()
+            today_kolkata = get_ist_date()
             if drive.Status == 'Application Closed' or (drive.ApplyDeadline and drive.ApplyDeadline < today_kolkata):
                 if drive.Status != 'Application Closed':
                     drive.Status = 'Application Closed'
@@ -214,19 +219,23 @@ class ApplyForDrive(Resource):
                     return {"message": "You have no resume uploaded in your profile. Please upload a resume to apply."}, 400
             
             available_from_dt = None
-            if not args.get('available_immediately') and args.get('available_from'):
+            if not args.get('available_immediately'):
+                if not args.get('available_from'):
+                    return {"message": "Expected Availability Date is required when immediate availability is No."}, 400
+                if not args.get('availability_remarks') or not args.get('availability_remarks').strip():
+                    return {"message": "Commitment Clarification remarks are required when immediate availability is No."}, 400
                 try:
                     available_from_dt = datetime.strptime(args['available_from'], '%Y-%m-%d').date()
                 except ValueError:
                     return {"message": "Invalid date format for availability. Use YYYY-MM-DD"}, 400
-                if available_from_dt < datetime.now().date():
+                if available_from_dt < get_ist_date():
                     return {"message": "Availability date cannot be in the past."}, 400
             new_app = Application(
                 DriveID=drive_id,
                 student_id=stud.id,
                 resume=file_path,
                 status='Pending',
-                application_datetime=datetime.now(),
+                application_datetime=get_ist_now(),
                 available_immediately=args.get('available_immediately', True),
                 available_from=available_from_dt,
                 availability_remarks=args.get('availability_remarks')
@@ -276,8 +285,8 @@ class StudentDetailsAPI(Resource):
         args = student_parser.parse_args()
         profile = StudentProfile.query.filter_by(user_id=current_user.id).first()
         if not profile:
-            # First-time setup: Validate required fields
-            if not all([args['roll_no'], args['phone'], args['cgpa'], args['resume'], args['name'], args['department']]):
+            # First-time setup: Validate required fields (resume is optional at registration)
+            if not all([args['roll_no'], args['phone'], args['cgpa'], args['name'], args['department']]):
                 return {"message": "All required fields must be filled "}, 400
             else:
                 resume_file = args['resume']
@@ -441,6 +450,28 @@ class StudentResumeAPI(Resource):
             print(f"Error in StudentResumeAPI POST: {e}")
             return {"message": "Error uploading resume"}, 500
 
+    @auth_required('session', 'token')
+    def delete(self):
+        try:
+            profile = StudentProfile.query.filter_by(user_id=current_user.id).first()
+            if not profile:
+                return {"message": "Profile not found"}, 404
+            if profile.resume:
+                old_path = profile.resume.replace('/', os.sep)
+                if os.path.exists(old_path):
+                    try:
+                        os.remove(old_path)
+                        print(f"successfully deleted resume file: {old_path}")
+                    except Exception as e:
+                        print(f"Error deleting file: {e}")
+                profile.resume = None
+                db.session.commit()
+                cache.clear()
+            return {"message": "Resume removed successfully!"}, 200
+        except Exception as e:
+            print(f"Error in StudentResumeAPI DELETE: {e}")
+            return {"message": "Error removing resume"}, 500
+
 student_api.add_resource(StudentResumeAPI, '/student_resume')
 
 
@@ -481,6 +512,28 @@ class ProfilePicAPI(Resource):
             import traceback
             traceback.print_exc()
             return {"message": "Error uploading picture"}, 500
+
+    @auth_required('session', 'token')
+    def delete(self):
+        try:
+            profile = StudentProfile.query.filter_by(user_id=current_user.id).first()
+            if not profile:
+                return {"message": "Profile not found"}, 404
+            if profile.profile_pic and "default" not in profile.profile_pic:
+                old_path = os.path.abspath(profile.profile_pic.replace('/', os.sep))
+                if os.path.exists(old_path):
+                    try:
+                        os.remove(old_path)
+                        print(f"successfully deleted profile pic file: {old_path}")
+                    except Exception as e:
+                        print(f"Error deleting profile pic file: {e}")
+            profile.profile_pic = None
+            db.session.commit()
+            cache.clear()
+            return {"message": "Profile picture removed successfully!"}, 200
+        except Exception as e:
+            print(f"Error in ProfilePicAPI DELETE: {e}")
+            return {"message": "Error removing picture"}, 500
 
 student_api.add_resource(ProfilePicAPI, '/profile_pic')
 
@@ -550,7 +603,7 @@ class StudentOfferAcceptAPI(Resource):
             return {"message": "No active offer to respond to for this application."}, 400
 
         if application.placement and application.placement.offer_expiry_date:
-            if application.placement.offer_expiry_date < datetime.now().date():
+            if application.placement.offer_expiry_date < get_ist_date():
                 return {"message": "This offer has expired. Please contact support or the employer to request an extension."}, 400
 
         # --- START of new logic ---
@@ -558,7 +611,7 @@ class StudentOfferAcceptAPI(Resource):
         is_job_offer = application.drive.Type == 'Job'
 
         application.status = 'Hired'
-        application.updated_time = datetime.now() # Explicitly set hired date
+        application.updated_time = get_ist_now() # Explicitly set hired date
         if application.placement:
             application.placement.offer_status = 'Accepted'
         
@@ -567,6 +620,12 @@ class StudentOfferAcceptAPI(Resource):
             f"Student {student.name} officially ACCEPTED your offer for '{application.drive.JobTitle}'.",
             "success"
         )
+
+        try:
+            from application.tasks import send_offer_response_email_task
+            send_offer_response_email_task.delay(application_id, 'accepted')
+        except Exception as e:
+            print(f"Error triggering accepted offer email task: {e}")
 
         if is_job_offer:
             # Cancel all other pending/shortlisted applications and their scheduled interviews
@@ -579,7 +638,7 @@ class StudentOfferAcceptAPI(Resource):
             for app in other_applications:
                 app.status = 'Cancelled'
                 app.rejection_reason = 'Automatically cancelled as student accepted another job offer.'
-                app.updated_time = datetime.now()
+                app.updated_time = get_ist_now()
                 if app.placement:
                     app.placement.offer_status = 'Cancelled'
 
@@ -616,14 +675,14 @@ class StudentOfferRejectAPI(Resource):
             return {"message": "No active offer to respond to for this application."}, 400
 
         if application.placement and application.placement.offer_expiry_date:
-            if application.placement.offer_expiry_date < datetime.now().date():
+            if application.placement.offer_expiry_date < get_ist_date():
                 return {"message": "This offer has expired. Please contact support or the employer to request an extension."}, 400
 
         if application.status != 'Rejected':
             application.previous_status = application.status
         application.status = 'Rejected'
         application.rejection_reason = 'Offer rejected by student.'
-        application.updated_time = datetime.now()
+        application.updated_time = get_ist_now()
         if application.placement:
             application.placement.offer_status = 'Rejected'
             
@@ -632,6 +691,12 @@ class StudentOfferRejectAPI(Resource):
             f"Student {student.name} officially DECLINED your offer for '{application.drive.JobTitle}'.",
             "warning"
         )
+
+        try:
+            from application.tasks import send_offer_response_email_task
+            send_offer_response_email_task.delay(application_id, 'declined')
+        except Exception as e:
+            print(f"Error triggering declined offer email task: {e}")
         db.session.commit()
         cache.clear()
         return {"message": "Offer rejected."}, 200

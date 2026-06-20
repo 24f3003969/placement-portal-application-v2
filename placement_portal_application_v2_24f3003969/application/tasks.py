@@ -1,6 +1,7 @@
 from celery import shared_task #If we want to use this task in other files then we can import it using this decorator
 from flask import Flask, render_template, current_app
 from .models import StudentProfile, Application, PlacementDrives, User, CompanyProfile, Placement, SupportQuery, Interview, Notification, UserStatusHistory
+from api.shared import get_ist_now, get_ist_date
 from .extensions import db, cache
 from .mail import send_email
 from datetime import datetime, timedelta
@@ -57,7 +58,7 @@ def generate_student_report_task(self, student_id):
             self.update_state(state='FAILURE', meta={'exc_type': 'ValueError', 'exc_message': 'Student not found'})
             return {'error': 'Student not found'}
 
-        now = datetime.now()
+        now = get_ist_now()
 
         # Fetch applications with eager loading for drives, companies, and interviews
         applications = Application.query.filter(Application.student_id == student.id).options(
@@ -78,7 +79,7 @@ def generate_student_report_task(self, student_id):
         }
         
         unique_id = uuid.uuid4().hex[:6]
-        file_name = f'student_{student.id}_report_{datetime.now().strftime("%f")}_{unique_id}.csv'
+        file_name = f'student_{student.id}_report_{get_ist_now().strftime("%f")}_{unique_id}.csv'
         
         # Absolute path for Celery worker
         reports_dir = os.path.join(current_app.root_path, 'static', 'reports')
@@ -212,7 +213,7 @@ def generate_offer_letter_task(self, application_id, offer_data):
             "joining_date": formatDateTime(offer_data['joining_date'], include_time=False),
             "expiry_date": formatDateTime(offer_data['expiry_date'], include_time=False),
             "message": offer_data.get('message'),
-            "generation_date": formatDateTime(datetime.now(), include_time=False)
+            "generation_date": formatDateTime(get_ist_now(), include_time=False)
         }
 
         # Render the HTML offer letter
@@ -245,7 +246,7 @@ def generate_offer_letter_task(self, application_id, offer_data):
         placement.joining_date = datetime.strptime(offer_data['joining_date'], '%Y-%m-%d').date()
         placement.message = offer_data.get('message')
         placement.offer_sent = True
-        placement.offer_sent_date = datetime.now()
+        placement.offer_sent_date = get_ist_now()
         placement.offer_status = 'Sent'
 
         # Create a notification for the student
@@ -429,6 +430,54 @@ def send_drive_status_update_email_task(drive_id, status, remark=None):
         print(f"Error in send_drive_status_update_email_task: {e}")
         raise e
 
+@shared_task(name="send_drive_suspension_emails_to_students")
+def send_drive_suspension_emails_to_students_task(drive_id):
+    """
+    Sends a drive suspension notification email to all students who applied to this drive.
+    """
+    try:
+        drive = PlacementDrives.query.get(drive_id)
+        if not drive or not drive.company:
+            print(f"Could not find drive or company for drive_id: {drive_id}")
+            return "Drive or company not found."
+
+        company_name = drive.company.company_name
+        job_title = drive.JobTitle
+        
+        # Get all applications for this drive
+        applications = Application.query.filter_by(DriveID=drive_id).all()
+        
+        emails_sent = 0
+        for app in applications:
+            if not app.student or not app.student.user:
+                continue
+            
+            student_email = app.student.user.email
+            student_name = app.student.name
+            
+            subject = f"Temporary Pause: {company_name} Recruitment Drive ({job_title})"
+            
+            html_message = f"""
+            <html>
+            <body>
+                <p>Dear {student_name},</p>
+                <p>The placement cell has temporarily paused processing for the <strong>{company_name}</strong> recruitment drive to update administrative details.</p>
+                <p>Your current application remains securely saved in our system, and no further action is required from your end at this moment. We will notify you immediately via email once the drive resumes or if any profile updates are necessary.</p>
+                <br>
+                <p>Best Regards,</p>
+                <p>The Placement Portal Team</p>
+            </body>
+            </html>
+            """
+            
+            if send_email(student_email, subject=subject, message=html_message):
+                emails_sent += 1
+                
+        return f"Suspension notification emails sent to {emails_sent} students."
+    except Exception as e:
+        print(f"Error in send_drive_suspension_emails_to_students_task: {e}")
+        return str(e)
+
 @shared_task(name="send_application_rejection_revoke_email")
 def send_application_rejection_revoke_email(application_id):
     application = Application.query.get(application_id)
@@ -500,7 +549,7 @@ def send_application_status_update_email_task(application_id):
 @shared_task(ignore_results=False, name="generate_admin_monthly_report", bind=True)
 def generate_admin_monthly_report_task(self):
         
-        now = datetime.now()
+        now = get_ist_now()
         # For end-of-month report, get data for the *previous* month
         first_day_of_current_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         last_day_of_previous_month = first_day_of_current_month - timedelta(days=1)
@@ -610,7 +659,7 @@ def generate_admin_monthly_report_task(self):
         template_path = os.path.join(current_app.root_path, 'templates', 'monthly_admin_report.html')
         data_for_template = {
             'report_month': report_month_str,
-            'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M'),
+            'generated_at': get_ist_now().strftime('%Y-%m-%d %H:%M'),
             'new_drives_with_stats': drives_with_stats,
             'placements': placements_this_month,
             'placements_by_dept': dict(placements_by_dept),
@@ -659,7 +708,7 @@ def cleanup_old_files_task():
             print("Reports directory not found. Skipping cleanup.")
             return "Reports directory not found."
 
-        cutoff = datetime.now() - timedelta(days=7)
+        cutoff = get_ist_now() - timedelta(days=7)
         files_deleted = 0
         
         for filename in os.listdir(reports_dir):
@@ -686,7 +735,7 @@ def cleanup_old_files_task():
 @shared_task(ignore_results=False, name="generate_daily_reminder", bind=True)
 def generate_daily_reminders_task(self):
     
-        tomorrow = datetime.now().date() + timedelta(days=1)
+        tomorrow = get_ist_date() + timedelta(days=1)
         next_day = tomorrow + timedelta(days=1)
         
         # Find drives with deadlines of tomorrow or the day after
@@ -1191,6 +1240,54 @@ def send_company_reactivated_email_task(company_id, note):
             raise Exception(f"Failed to send reactivation email to company {company.user.email}")
     except Exception as e:
         print(f"Error in send_company_reactivated_email_task: {e}")
+        traceback.print_exc()
+        raise e
+
+@shared_task(name="send_offer_response_email")
+def send_offer_response_email_task(application_id, response_type):
+    try:
+        app = Application.query.get(application_id)
+        if not app or not app.drive or not app.drive.company or not app.drive.company.user or not app.drive.company.user.email:
+            print(f"Could not find application or company email for application_id: {application_id}")
+            return "Application or company email not found."
+        
+        company_email = app.drive.company.user.email
+        student_name = app.student.name
+        job_title = app.drive.JobTitle
+        company_name = app.drive.company.company_name
+        
+        subject = f"Offer {response_type.capitalize()}: {student_name} - {job_title}"
+        
+        if response_type == 'accepted':
+            message_body = f"""
+            <p>Dear {company_name},</p>
+            <p>We are excited to inform you that candidate <strong>{student_name}</strong> has officially <strong>ACCEPTED</strong> your placement offer for the position of <strong>{job_title}</strong>.</p>
+            <p>You can now view this candidate under the 'Hired Board' tab on your applications dashboard to proceed with onboarding steps.</p>
+            """
+        else: # declined
+            message_body = f"""
+            <p>Dear {company_name},</p>
+            <p>We wish to inform you that candidate <strong>{student_name}</strong> has officially <strong>DECLINED</strong> your placement offer for the position of <strong>{job_title}</strong>.</p>
+            <p>Their application status has been updated to 'Rejected' (Reason: Offer rejected by student) and they are no longer active in this drive's pipeline. You may proceed to review other candidates.</p>
+            """
+            
+        html_message = f"""
+        <html>
+        <body>
+            {message_body}
+            <br>
+            <p>Best Regards,</p>
+            <p>The Placement Portal Team</p>
+        </body>
+        </html>
+        """
+        
+        if send_email(company_email, subject=subject, message=html_message):
+            return f"Offer response email ({response_type}) sent to company {company_email}."
+        else:
+            raise Exception(f"Failed to send email to company {company_email}")
+    except Exception as e:
+        print(f"Error in send_offer_response_email_task: {e}")
         traceback.print_exc()
         raise e
     

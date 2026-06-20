@@ -199,7 +199,6 @@ paths:
                 - phone
                 - cgpa
                 - department
-                - resume
               properties:
                 name:
                   type: string

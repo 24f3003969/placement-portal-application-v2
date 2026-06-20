@@ -139,10 +139,6 @@ const StudentDetails = {
             this.profile.resume = event.target.files[0];
         },
         async submitProfile() {
-            if (!this.profile.resume) {
-                alert("Please upload your resume.");
-                return;
-            }
             if (this.fileTooLarge) {
                 alert("Resume file is too large! Max 5MB.");
                 return;

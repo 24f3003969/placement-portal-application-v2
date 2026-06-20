@@ -86,7 +86,8 @@ const StudentApplicationsAndInterviews = {
                                         </div>
                                     </td>
                                     <td>
-                                        <span :class="statusBadge(app.rejection_reason ? 'Rejected' : app.status)">{{ app.rejection_reason ? 'Rejected' : app.status }}</span>
+                                        <span v-if="app.drive && app.drive.Status === 'Suspended'" class="badge bg-warning text-dark shadow-sm">Temporarily on Hold</span>
+                                        <span v-else :class="statusBadge(app.rejection_reason ? 'Rejected' : app.status)">{{ app.rejection_reason ? 'Rejected' : app.status }}</span>
                                         <span v-if="app.is_currently_eligible === false" class="badge bg-danger text-white ms-1" :title="app.eligibility_issues ? app.eligibility_issues.join(', ') : 'Profile ineligible'">Not Eligible</span>
                                     </td>
                                     <td>{{ formatDateTime(app.application_datetime) }}</td>
@@ -98,8 +99,12 @@ const StudentApplicationsAndInterviews = {
                                     </td>
                                     <td class="text-end pe-4">
                                         <button v-if="app.status === 'Pending'" @click="cancelApplication(app.id)" class="btn btn-sm btn-outline-danger">Cancel</button>
-                                        <button v-else-if="app.status === 'Shortlisted'" @click="viewInterviewDetails(app.id)" class="btn btn-sm btn-outline-primary">View Interview</button>
-                                        <button v-else-if="app.status === 'Selected' || app.status === 'Hired' || (app.status === 'Rejected' && app.offer_sent_date)" @click="viewPlacementOffer(app.id)" class="btn btn-sm btn-success shadow-sm">View Offer</button>
+                                        <button v-else-if="['Shortlisted', 'Interview', 'Interviewing'].includes(app.status)" @click="viewInterviewDetails(app.id)" class="btn btn-sm btn-outline-primary">View Interview</button>
+                                        <template v-else-if="app.status === 'Selected'">
+                                            <span v-if="!app.offer_letter" class="badge bg-warning text-dark px-2 py-1"><i class="bi bi-hourglass-split me-1"></i>Offer Awaiting</span>
+                                            <button v-else @click="viewPlacementOffer(app.id)" class="btn btn-sm btn-success shadow-sm">View Offer</button>
+                                        </template>
+                                        <button v-else-if="app.status === 'Hired' || (app.status === 'Rejected' && app.offer_sent_date)" @click="viewPlacementOffer(app.id)" class="btn btn-sm btn-success shadow-sm">View Offer</button>
                                         <span v-else class="text-muted small">-</span>
                                     </td>
                                 </tr>
@@ -126,9 +131,9 @@ const StudentApplicationsAndInterviews = {
                         </div>
                     </div>
                     <div class="col-md-6">
-                        <div class="alert alert-danger py-2 px-3 border-0 shadow-sm h-100 d-flex align-items-center mb-0">
-                            <i class="bi bi-calendar-x fs-4 me-2 opacity-75"></i>
-                            <div class="small">You missed <strong>{{ interviewInsights.missedThisMonth }}</strong> interviews.</div>
+                        <div class="alert alert-warning py-2 px-3 border-0 shadow-sm h-100 d-flex align-items-center mb-0">
+                            <i class="bi bi-hourglass-split fs-4 me-2 opacity-75"></i>
+                            <div class="small">You have <strong>{{ interviewInsights.missedThisMonth }}</strong> interviews awaiting results.</div>
                         </div>
                     </div>
                 </div>
@@ -168,6 +173,7 @@ const StudentApplicationsAndInterviews = {
                                     </td>
                                     <td>
                                         Round {{ interview.round_no }}: {{ interview.round_name }}
+                                        <span v-if="interview.status === 'suspended'" class="badge bg-warning text-dark ms-1 shadow-xs fw-semibold">Temporarily on Hold</span>
                                         <span v-if="interview.is_currently_eligible === false" class="badge bg-danger text-white ms-1" :title="interview.eligibility_issues ? interview.eligibility_issues.join(', ') : 'Profile ineligible'">Not Eligible</span>
                                     </td>
                                     <td>{{ formatDateTime(interview.datetime) }}</td>
@@ -193,10 +199,9 @@ const StudentApplicationsAndInterviews = {
             </div>
 
             <div class="card shadow-sm border-0 mb-4">
-                <div class="card-header bg-white py-3">
-                    <h5 class="fw-bold mb-0">Completed & Missed Interviews</h5>
-                </div>
-                <div class="card-body p-0">
+                <div class="card-body">
+                    <h5 class="fw-bold mb-0">Completed & Past Evaluations</h5>
+                    <hr class="mt-2 mb-3">
                     <div v-if="completedAndMissedInterviews.length > 0" class="table-responsive table-scroll-sm">
                         <table class="table table-hover align-middle mb-0">
                             <thead class="table-light">
@@ -227,19 +232,27 @@ const StudentApplicationsAndInterviews = {
                                     </td>
                                     <td>{{ formatDateTime(interview.datetime) }}</td>
                                     <td>
-                                        <span v-if="interview.status=='scheduled'" class="badge bg-danger">missed</span>
+                                        <span v-if="interview.status=='scheduled'" class="badge bg-warning text-dark">result awaiting</span>
                                         <span v-else :class="interviewStatusBadge(interview.status)">{{ interview.status }}</span>
                                         </td>
                                     <td class="text-end pe-4">
-                                        <span v-if="interview.result" :class="interviewResultBadge(interview.result)">{{ interview.result }}</span>
-                                        <span v-else class="text-muted">N/A</span>
+                                        <div class="d-flex align-items-center justify-content-end gap-1">
+                                            <span v-if="interview.result" :class="interviewResultBadge(interview.result)">{{ interview.result }}</span>
+                                            <span v-else class="text-muted">N/A</span>
+                                            <button v-if="interview.student_facing_remarks" 
+                                                    @click="showRemark(interview.student_facing_remarks)" 
+                                                    class="btn btn-link p-0 text-decoration-none ms-1" 
+                                                    title="View feedback notes">
+                                                <i class="bi bi-chat-left-text text-primary fs-6"></i>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
                     <div v-else class="text-center p-4 text-muted">
-                        No completed or missed interviews.
+                        No completed or past interviews.
                     </div>
                 </div>
             </div>
@@ -281,9 +294,56 @@ const StudentApplicationsAndInterviews = {
                         <h5 class="modal-title fw-bold">Interview Details: {{ selectedApplicationForInterview.drive.JobTitle }}</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
-                    <div class="modal-body p-4 text-center text-muted">
-                        <i class="bi bi-camera-video fs-1 d-block mb-3 opacity-50"></i>
-                        <p>This section would show detailed interview information for the selected application.</p>
+                    <div class="modal-body p-4">
+                        <div v-if="interviewsForSelectedApplication.length === 0" class="text-center text-muted py-4">
+                            <i class="bi bi-calendar-x fs-1 d-block mb-3 opacity-50"></i>
+                            <p class="mb-0">No interview rounds have been scheduled for this application yet.</p>
+                        </div>
+                        <div v-else>
+                            <div class="table-responsive rounded border shadow-sm bg-white">
+                                <table class="table align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="ps-4">Round</th>
+                                            <th>Date & Time</th>
+                                            <th>Location / Link</th>
+                                            <th>Status</th>
+                                            <th>Result</th>
+                                            <th class="pe-4 text-end">Notes for You</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="interview in interviewsForSelectedApplication" :key="interview.interview_id" class="border-bottom">
+                                            <td class="ps-4 py-3">
+                                                <div class="fw-bold">Round {{ interview.round_no }}</div>
+                                                <small class="text-muted">{{ interview.round_name }}</small>
+                                            </td>
+                                            <td>{{ formatDateTime(interview.datetime) }}</td>
+                                            <td>
+                                                <a v-if="isUrl(interview.location_or_link) && interview.status === 'scheduled'" :href="interview.location_or_link" target="_blank" class="btn btn-xs btn-outline-primary px-2 py-1 rounded-pill">
+                                                    <i class="bi bi-video"></i> Join Meeting
+                                                </a>
+                                                <span v-else class="small text-muted">{{ interview.location_or_link }}</span>
+                                            </td>
+                                            <td>
+                                                <span v-if="interview.status === 'scheduled' && new Date(interview.datetime) < new Date()" class="badge bg-warning text-dark">result awaiting</span>
+                                                <span v-else :class="interviewStatusBadge(interview.status)">{{ interview.status }}</span>
+                                            </td>
+                                            <td>
+                                                <span v-if="interview.result" :class="interviewResultBadge(interview.result)">{{ interview.result }}</span>
+                                                <span v-else class="text-muted">N/A</span>
+                                            </td>
+                                            <td class="pe-4 text-end">
+                                                <span v-if="interview.student_facing_remarks" class="small text-dark font-monospace bg-light p-1 rounded border border-light-subtle d-inline-block text-wrap" style="max-width: 250px;">
+                                                    {{ interview.student_facing_remarks }}
+                                                </span>
+                                                <span v-else class="text-muted small">None</span>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -421,7 +481,7 @@ const StudentApplicationsAndInterviews = {
             const now = new Date();
             return this.allInterviews.filter(interview => {
                 const interviewDateTime = new Date(interview.datetime);
-                return interview.status === 'scheduled' && interviewDateTime > now;
+                return (interview.status === 'scheduled' || interview.status === 'suspended') && interviewDateTime > now;
             }).sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
         },
         completedAndMissedInterviews() {
@@ -448,6 +508,11 @@ const StudentApplicationsAndInterviews = {
                 clearedThisMonth,
                 missedThisMonth,
             };
+        },
+        interviewsForSelectedApplication() {
+            if (!this.selectedApplicationForInterview) return [];
+            return this.allInterviews.filter(i => parseInt(i.application_id) === parseInt(this.selectedApplicationForInterview.id))
+                                     .sort((a, b) => parseInt(a.round_no) - parseInt(b.round_no));
         }
     },
     methods: {

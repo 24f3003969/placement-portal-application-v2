@@ -363,7 +363,7 @@ const AdminManageDrives = {
         },
         viewDriveDetails(drive) {
             this.selectedDrive = drive;
-            if (drive.Status === 'Pending') {
+            if (drive.Status === 'Pending' || drive.Status === 'Rejected') {
                 this.currentView = 'review';
             } else {
                 this.currentView = 'details';

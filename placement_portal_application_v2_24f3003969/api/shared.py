@@ -1,13 +1,21 @@
 from flask_restful import fields
 from application.extensions import db
-from application.models import Notification, Application, StudentProfile
 from collections import Counter
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+def get_ist_now():
+    return datetime.now(ZoneInfo('Asia/Kolkata')).replace(tzinfo=None)
+
+def get_ist_date():
+    return datetime.now(ZoneInfo('Asia/Kolkata')).date()
 
 def format_date(date_obj):
     return date_obj.isoformat() if date_obj else None
 
 def create_notification(user_id, message, notif_type='info'):
     """Call this inside your routes right next to your Celery .delay() calls"""
+    from application.models import Notification
     if not Notification.should_notify(message):
         return None
     new_notif = Notification(user_id=user_id, message=message, type=notif_type)
@@ -43,6 +51,7 @@ placement_drive_fields = {
 
 def get_drive_insights(drive_id):
     # Get all applications for the drive, joining with student profiles
+    from application.models import Application, StudentProfile
     applications = db.session.query(Application).join(StudentProfile, Application.student_id == StudentProfile.id).filter(Application.DriveID == drive_id).all()
 
     total_applicants = len(applications)
@@ -117,7 +126,7 @@ def run_expired_drives_sweep():
     from datetime import datetime
     from application.tasks import send_drive_status_update_email_task
     
-    today = datetime.now(ZoneInfo('Asia/Kolkata')).date()
+    today = get_ist_date()
     
     # 1. Active expired drives
     expired_active = PlacementDrives.query.filter(

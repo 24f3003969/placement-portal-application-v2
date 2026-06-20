@@ -18,13 +18,13 @@ const DriveDetailView = {
         </div>
             
         <div class="row g-3">
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <h6 class="fw-bold mb-1.5 text-uppercase text-muted" style="font-size: 0.75rem;"><i class="bi bi-gear-fill me-1 text-primary"></i>Skills Needed</h6>
                 <div class="d-flex flex-wrap gap-1">
                     <span v-for="skill in drive.RequiredSkills" :key="skill" class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 shadow-xs" style="font-size: 0.7rem;">{{ skill }}</span>
                 </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <h6 class="fw-bold mb-1.5 text-uppercase text-muted" style="font-size: 0.75rem;"><i class="bi bi-building-fill me-1 text-info"></i>Eligible Departments</h6>
                 <div v-if="formattedDepartments && formattedDepartments.length > 0" class="d-flex flex-wrap gap-1">
                     <span v-for="dept in formattedDepartments" :key="dept" class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1 shadow-xs fw-medium" style="font-size: 0.7rem;">
@@ -37,7 +37,18 @@ const DriveDetailView = {
                     </span>
                 </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
+                <h6 class="fw-bold mb-1.5 text-uppercase text-muted" style="font-size: 0.75rem;"><i class="bi bi-award-fill me-1 text-warning"></i>Required CGPA</h6>
+                <div>
+                    <span v-if="drive.min_cgpa" class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1 shadow-xs fw-bold" style="font-size: 0.7rem;">
+                        {{ drive.min_cgpa }} &amp; Above
+                    </span>
+                    <span v-else class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 shadow-xs fw-medium" style="font-size: 0.7rem;">
+                        No Minimum Limit
+                    </span>
+                </div>
+            </div>
+            <div class="col-md-3">
                 <h6 class="fw-bold mb-1.5 text-uppercase text-muted" style="font-size: 0.75rem;"><i class="bi bi-list-task me-1 text-secondary"></i>Interview Rounds</h6>
                 <div v-if="drive.InterviewRounds && drive.InterviewRounds.length > 0" class="d-flex flex-wrap gap-1">
                     <span v-for="(round, index) in drive.InterviewRounds" :key="index" class="badge bg-light text-dark border border-secondary px-2 py-1 fw-medium shadow-xs" style="font-size: 0.7rem;">
@@ -143,7 +154,11 @@ const DriveDetailView = {
                 </div>
                 <div v-else class="alert alert-info w-100 mb-0 py-2.5 small">
                     <strong><i class="bi bi-info-circle-fill me-2"></i>You have already applied for this drive.</strong>
-                    <span class="d-block mt-1.5">Current Status: <span class="badge bg-primary ms-1" style="font-size: 0.7rem;">{{ application.status || 'Applied' }}</span></span>
+                    <span class="d-block mt-1.5">
+                        Current Status: <span class="badge bg-primary ms-1" style="font-size: 0.7rem;">{{ application.status || 'Applied' }}</span>
+                        <span v-if="application.available_immediately" class="badge bg-success ms-2" style="font-size: 0.7rem;">Immediate Joiner</span>
+                        <span v-else class="badge bg-warning text-dark ms-2" style="font-size: 0.7rem;" :title="'Remarks: ' + application.availability_remarks">Delayed (from {{ application.available_from }})</span>
+                    </span>
                 </div>
             </div>
 
@@ -281,6 +296,16 @@ const DriveDetailView = {
                 }
                 payload.append('available_immediately', this.form.availableImmediately);
                 if (!this.form.availableImmediately) {
+                    if (!this.form.availableFrom) {
+                        alert("Expected Availability Date is required.");
+                        this.loading = false;
+                        return;
+                    }
+                    if (!this.form.availabilityRemarks || !this.form.availabilityRemarks.trim()) {
+                        alert("Commitment Clarification remarks are required.");
+                        this.loading = false;
+                        return;
+                    }
                     if (new Date(this.form.availableFrom) < new Date(new Date().setHours(0,0,0,0))) {
                         alert("Availability date cannot be in the past.");
                         this.loading = false;
@@ -295,7 +320,6 @@ const DriveDetailView = {
                     body: payload
                 });
                 if (res.ok) {
-                    alert("Application submitted successfully!");
                     this.$emit('success', this.form.driveId);
                 } else {
                     const err = await res.json();

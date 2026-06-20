@@ -14,7 +14,7 @@ const EmployerDetails={
                         </div>
                         <div class="col-md-6">
                             <div class="form-floating mb-3">
-                                <input v-model="sec_email" type="text" class="form-control" placeholder="Secondary Email" />
+                                <input v-model="sec_email" type="email" class="form-control" placeholder="Secondary Email" />
                                 <label>Secondary Email (if any)</label>
                             </div>
                         </div>

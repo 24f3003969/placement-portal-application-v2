@@ -27,6 +27,7 @@ const PostedDrives={
                                 <option value="Application Closed">Closed</option>
                                 <option value="Rejected">Rejected</option>
                                 <option value="Pending">Pending</option>
+                                <option value="Suspended">Suspended</option>
                             </select>
                         </div>
                         <div class="mb-3">

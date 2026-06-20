@@ -104,7 +104,7 @@ const CompanyProfile = {
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label small fw-bold">Secondary Email</label>
-                                <input type="text" v-model="profile.secondary_email" class="form-control" placeholder="Enter secondary email (optional)">
+                                <input type="email" v-model="profile.secondary_email" class="form-control" placeholder="Enter secondary email (optional)">
                             </div>
                             <div class="col-12">
                                 <label class="form-label small fw-bold">Company Description</label>

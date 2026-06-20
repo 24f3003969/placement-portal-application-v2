@@ -3,7 +3,7 @@ from application.extensions import db, security
 from flask_security import UserMixin, RoleMixin
 from flask_security.models import fsqla_v3 as fsql
 from datetime import datetime
-
+from api.shared import get_ist_now, get_ist_date
 
 fsql.FsModels.set_db_info(db)
 
@@ -55,7 +55,7 @@ class StudentProfile(db.Model):
     github=db.Column(db.String, nullable=True)
     certificates_link=db.Column(db.String,nullable=True)
     profile_pic=db.Column(db.String,nullable=True)
-    registration_date = db.Column(db.Date, default=lambda: datetime.now().date(), nullable=True)
+    registration_date = db.Column(db.Date, default=get_ist_date, nullable=True)
     about_me = db.Column(db.Text, nullable=True)
     user=db.relationship('User', backref=db.backref('profile', uselist=False), lazy=True)
     def to_dict(self):
@@ -89,7 +89,7 @@ class CompanyProfile(db.Model):
     description = db.Column(db.Text, nullable=True)
     secondary_email=db.Column(db.String(),nullable=True)
     is_approved = db.Column(db.Boolean, default=False, nullable=False)
-    registration_date = db.Column(db.Date, default=lambda: datetime.now().date(), nullable=False)
+    registration_date = db.Column(db.Date, default=get_ist_date, nullable=False)
     user=db.relationship('User', backref=db.backref('company_profile', uselist=False), lazy=True)
 
     @property
@@ -125,7 +125,7 @@ class CompanyProfile(db.Model):
 class DriveTemplate(db.Model):
     __tablename__='drive_template'
     id=db.Column(db.Integer,primary_key=True)
-    CreatedDate=db.Column(db.Date,default=datetime.now().date(),nullable=False)
+    CreatedDate=db.Column(db.Date,default=get_ist_date,nullable=False)
     TemplateName=db.Column(db.String,nullable=False)
     JobTitle=db.Column(db.String,nullable=False)
     JobDescription=db.Column(db.Text,nullable=False)
@@ -156,7 +156,7 @@ class PlacementDrives(db.Model):
     Duration=db.Column(db.String,default=None)
     Status=db.Column(db.String,default="Pending") #Approved,Pending,Rjected,closed
     Type=db.Column(db.String,nullable=False) #Job, Internship
-    PostedDate=db.Column(db.Date,default=datetime.now().date(),nullable=False)
+    PostedDate=db.Column(db.Date,default=get_ist_date,nullable=False)
     Location=db.Column(db.String)
     Salary=db.Column(db.String,nullable=False)
     Remark = db.Column(db.Text, default=None)
@@ -177,13 +177,13 @@ class Application(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     DriveID = db.Column(db.Integer, db.ForeignKey('placement_drives.DriveID'), nullable=False)
     student_id = db.Column(db.Integer, db.ForeignKey('student_profile.id'), nullable=False)
-    application_datetime = db.Column(db.DateTime, default=datetime.now(), nullable=False)
+    application_datetime = db.Column(db.DateTime, default=get_ist_now, nullable=False)
     status = db.Column(db.String(50), nullable=False,default=None)  
     selected_date = db.Column(db.Date, nullable=True)
     rejection_reason = db.Column(db.Text, nullable=True)
     rejection_revoke_note = db.Column(db.Text, nullable=True)
     resume = db.Column(db.Text, nullable=True)  
-    updated_time=db.Column(db.DateTime,default=datetime.now(),nullable=False)
+    updated_time=db.Column(db.DateTime,default=get_ist_now,nullable=False)
     available_immediately = db.Column(db.Boolean, default=True, nullable=False)
     available_from = db.Column(db.Date, nullable=True)
     availability_remarks = db.Column(db.Text, nullable=True)
@@ -259,7 +259,7 @@ class SupportQuery(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     message = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    created_at = db.Column(db.DateTime, default=get_ist_now, nullable=False)
     status = db.Column(db.String(50), default='Open', nullable=False) # Open, In Progress, Closed
     response = db.Column(db.Text, nullable=True)
     responded_at = db.Column(db.DateTime, nullable=True)
@@ -272,7 +272,7 @@ class UserStatusHistory(db.Model):
     status = db.Column(db.String(50), nullable=False) # 'disabled', 'enabled'
     changed_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # Admin ID who changed it
     note = db.Column(db.Text, nullable=True)
-    timestamp = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    timestamp = db.Column(db.DateTime, default=get_ist_now, nullable=False)
 
     user = db.relationship('User', foreign_keys=[user_id], backref=db.backref('status_history', lazy='dynamic'))
     changed_by = db.relationship('User', foreign_keys=[changed_by_id])
@@ -283,7 +283,7 @@ class Notification(db.Model):
     message = db.Column(db.String(500), nullable=False)
     type = db.Column(db.String(50), default='info') # e.g., 'success', 'warning', 'info'
     is_read = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=get_ist_now)
 
     user = db.relationship('User', backref=db.backref('notifications', lazy='dynamic'))
 

@@ -15,7 +15,7 @@ from application.models import (
     Application, CompanyProfile, PlacementDrives, StudentProfile,
     Interview, User, DriveTemplate, Placement
 )
-from .shared import create_notification, format_date, placement_drive_fields, get_drive_insights
+from .shared import create_notification, format_date, placement_drive_fields, get_drive_insights, get_ist_now, get_ist_date
 
 company_bp = Blueprint('company_api', __name__)
 company_api = Api(company_bp)
@@ -37,6 +37,7 @@ drive_parser.add_argument('Type', type=str, required=True, help="Drive type  is 
 drive_parser.add_argument('Location', type=str, required=True, help="address is required")
 drive_parser.add_argument('Salary', type=str, required=True, help="salary/stipend is required")
 drive_parser.add_argument('Duration', type=str)
+drive_parser.add_argument('min_cgpa', type=float, required=False)
 
 template_parser = reqparse.RequestParser()
 template_parser.add_argument('TemplateName', type=str, required=True, help="Template name is required")
@@ -180,7 +181,8 @@ class PlacementDriveAPI(Resource):
             Status=args['Status'],
             noRounds=args['noRounds'],
             InterviewRounds=args['InterviewRounds'],
-            WorkMode=args['WorkMode'], Location=args['Location'], Salary=args['Salary'], Duration=args.get('Duration'))
+            WorkMode=args['WorkMode'], Location=args['Location'], Salary=args['Salary'], Duration=args.get('Duration'),
+            min_cgpa=args.get('min_cgpa'))
         db.session.add(drive_resource)
         admins = User.query.filter(User.roles.any(name='admin')).all()
         for admin in admins:
@@ -220,7 +222,7 @@ class PlacementDriveAPI(Resource):
         drive.Remark = arguments.get('remarks')
         drive.RejectionDate = None
         if arguments['Status'] == 'Rejected':
-            drive.RejectionDate = datetime.now().date()
+            drive.RejectionDate = get_ist_date()
         db.session.commit()
         db.session.refresh(drive)
         
@@ -539,8 +541,9 @@ class CompanyApplicationsAPI(Resource):
 
     company_application_detail_fields = {
         'id': fields.Integer,
+        'student_is_hired': fields.Boolean(attribute=lambda x: db.session.query(Application).filter(Application.student_id == x.student_id, Application.status == 'Hired').first() is not None),
         'status': fields.String,
-        'is_offer_expired': fields.Boolean(attribute=lambda x: (x.placement.offer_expiry_date < datetime.now().date()) if (x.placement and x.placement.offer_expiry_date) else False),
+        'is_offer_expired': fields.Boolean(attribute=lambda x: (x.placement.offer_expiry_date < get_ist_date()) if (x.placement and x.placement.offer_expiry_date) else False),
         'is_currently_eligible': fields.Boolean(attribute=lambda x: x.check_current_eligibility()[0]),
         'eligibility_issues': fields.Raw(attribute=lambda x: x.check_current_eligibility()[1]),
         'application_date': fields.String(attribute=lambda x: x.application_datetime.isoformat() if getattr(x, 'application_datetime', None) else None),
@@ -591,6 +594,9 @@ class CompanyApplicationsAPI(Resource):
         'round_name': fields.String,
         'latest_interview_status': fields.String,
         'latest_interview_result': fields.String,
+        'previous_round_no': fields.Integer,
+        'previous_round_remarks': fields.String,
+        'previous_round_student_remarks': fields.String,
     }
 
     @auth_required('token')
@@ -635,7 +641,7 @@ class CompanyApplicationsAPI(Resource):
         ).all()
 
         processed_applications = []
-        today = datetime.now().date()
+        today = get_ist_date()
         scheduled_interviews_count = 0
 
         for app in all_applications:
@@ -658,20 +664,47 @@ class CompanyApplicationsAPI(Resource):
             app_data['round_name'] = 'N/A'
             app_data['latest_interview_status'] = 'N/A'
             app_data['latest_interview_result'] = 'N/A'
+            app_data['previous_round_no'] = None
+            app_data['previous_round_remarks'] = None
+            app_data['previous_round_student_remarks'] = None
 
             # Fetch latest interview details if application is shortlisted or has interviews
             if app.status == 'Interviewing' or app.status == 'Shortlisted' or app.interviews:
                 # Get the interview for the highest round number
                 latest_interview = Interview.query.filter_by(application_id=app.id).order_by(Interview.round_no.desc()).first()
                 if latest_interview:
-                    app_data['interview_datetime'] = latest_interview.datetime.isoformat() if latest_interview.datetime else 'Not Scheduled'
-                    app_data['interview_location'] = latest_interview.location_or_link
-                    app_data['round_no'] = latest_interview.round_no
-                    app_data['round_name'] = latest_interview.round_name
-                    app_data['latest_interview_status'] = latest_interview.status
-                    app_data['latest_interview_result'] = latest_interview.result if latest_interview.result else 'N/A'
-                    if latest_interview.datetime and latest_interview.datetime.date() >= today: # Count upcoming/today's interviews
-                        scheduled_interviews_count += 1
+                    if latest_interview.status == 'completed' and latest_interview.result == 'passed':
+                        # Awaiting next round scheduling
+                        next_round = latest_interview.round_no + 1
+                        app_data['interview_datetime'] = 'Not Scheduled'
+                        app_data['interview_location'] = 'N/A'
+                        app_data['round_no'] = next_round
+                        drive = app.drive
+                        if drive and drive.InterviewRounds and next_round <= len(drive.InterviewRounds):
+                            app_data['round_name'] = drive.InterviewRounds[next_round - 1]
+                        else:
+                            app_data['round_name'] = f"Round {next_round}"
+                        app_data['latest_interview_status'] = 'Awaiting Scheduling'
+                        app_data['latest_interview_result'] = 'N/A'
+                    else:
+                        app_data['interview_datetime'] = latest_interview.datetime.isoformat() if latest_interview.datetime else 'Not Scheduled'
+                        app_data['interview_location'] = latest_interview.location_or_link
+                        app_data['round_no'] = latest_interview.round_no
+                        app_data['round_name'] = latest_interview.round_name
+                        app_data['latest_interview_status'] = latest_interview.status
+                        app_data['latest_interview_result'] = latest_interview.result if latest_interview.result else 'N/A'
+                        if latest_interview.datetime and latest_interview.datetime.date() >= today: # Count upcoming/today's interviews
+                            scheduled_interviews_count += 1
+
+            # Fetch previous completed round details if any
+            previous_completed_interview = Interview.query.filter_by(
+                application_id=app.id,
+                status='completed'
+            ).order_by(Interview.round_no.desc()).first()
+            if previous_completed_interview:
+                app_data['previous_round_no'] = previous_completed_interview.round_no
+                app_data['previous_round_remarks'] = previous_completed_interview.remarks
+                app_data['previous_round_student_remarks'] = previous_completed_interview.student_facing_remarks
 
             processed_applications.append(app_data)
 
@@ -738,7 +771,7 @@ class CompanyApplicationsAPI(Resource):
                     "warning"
                 )
         elif new_status == 'Selected':
-            application.selected_date = datetime.now().date()
+            application.selected_date = get_ist_date()
             latest_interview = Interview.query.filter_by(application_id=application.id).order_by(Interview.round_no.desc()).first()
             if latest_interview and latest_interview.status == 'scheduled':
                 latest_interview.status = 'completed'
@@ -785,7 +818,7 @@ class CompanyDashboardSummaryAPI(Resource):
         if not comp:
             return {"message": "Company profile not found"}, 404
 
-        today = datetime.now().date()
+        today = get_ist_date()
         drive_ids = [dr.DriveID for dr in PlacementDrives.query.filter_by(CompanyID=comp.id).all()]
 
         if not drive_ids:
@@ -830,7 +863,7 @@ class CompanyDashboardSummaryAPI(Resource):
         }
 
         # --- Action Center Calculations (Fixed to match execution states) ---
-        now_dt = datetime.now()
+        now_dt = get_ist_now()
         # 1. Pending Screenings: Count applications waiting in 'Pending' state
         pending_screenings_count = sum(1 for a in all_applications if a.status == 'Pending' and not a.rejection_reason)
         
@@ -870,7 +903,7 @@ class CompanyDashboardSummaryAPI(Resource):
         if hired_or_selected_apps:
             for app in hired_or_selected_apps:
                 # Fallback to today if application_datetime is missing for some old manual records
-                app_date = app.application_datetime.date() if app.application_datetime else datetime.now().date()
+                app_date = app.application_datetime.date() if app.application_datetime else get_ist_date()
                 days = (app.selected_date - app_date).days
                 total_days += days if days >= 0 else 0
             avg_time_to_hire = round(total_days / len(hired_or_selected_apps))
@@ -902,7 +935,7 @@ class CompanyDashboardSummaryAPI(Resource):
 
         # --- Notifications (Enhanced) ---
         recent_apps = sorted([app for app in all_applications if app.status == 'Pending' and not app.rejection_reason], key=lambda x: x.application_datetime or datetime.min, reverse=True)[:5]
-        notifications = [{"id": app.id, "student_name": app.student.name, "job_title": app.drive.JobTitle, "timestamp": app.application_datetime.isoformat() if app.application_datetime else datetime.now().isoformat(), "type": "new_application", "student_id": app.student.user_id} for app in recent_apps]
+        notifications = [{"id": app.id, "student_name": app.student.name, "job_title": app.drive.JobTitle, "timestamp": app.application_datetime.isoformat() if app.application_datetime else get_ist_now().isoformat(), "type": "new_application", "student_id": app.student.user_id} for app in recent_apps]
 
         return {
             "kpis": kpis,
@@ -969,7 +1002,8 @@ drive_with_interviews_fields = {
     'JobTitle': fields.String,
     'noRounds': fields.Integer,
     'InterviewRounds': fields.Raw(attribute='InterviewRounds'),
-    'interviews': fields.List(fields.Nested(interview_fields_for_company))
+    'interviews': fields.List(fields.Nested(interview_fields_for_company)),
+    'awaiting_scheduling': fields.Raw
 }
 
 class CompanyInterviewsAPI(Resource):
@@ -981,18 +1015,46 @@ class CompanyInterviewsAPI(Resource):
         if not company:
             return {"message": "Company profile not found"}, 404
 
-        # Get all drives for the company that have interviews
-        drives_with_interviews = db.session.query(PlacementDrives).join(Application).join(Interview).filter(
-            PlacementDrives.CompanyID == company.id
-        ).distinct().all()
+        # Get all drives for the company
+        drives_with_interviews = PlacementDrives.query.filter_by(CompanyID=company.id).all()
 
-        # For each of these drives, load all their interviews
+        # For each of these drives, load all their interviews and calculate awaiting_scheduling list
         for drive in drives_with_interviews:
             drive.interviews = Interview.query.join(Application).filter(
                 Application.DriveID == drive.DriveID
             ).options(
                 db.joinedload(Interview.application).joinedload(Application.student)
             ).order_by(Interview.datetime.desc()).all()
+
+            awaiting_list = []
+            active_apps = Application.query.filter(
+                Application.DriveID == drive.DriveID,
+                Application.status.in_(['Shortlisted', 'Interviewing', 'Interview'])
+            ).options(db.joinedload(Application.student)).all()
+
+            for app in active_apps:
+                latest_int = Interview.query.filter_by(application_id=app.id).order_by(Interview.round_no.desc()).first()
+                next_round_no = 0
+                if not latest_int:
+                    next_round_no = 1
+                elif latest_int.status == 'completed' and latest_int.result == 'passed':
+                    next_round_no = latest_int.round_no + 1
+
+                if next_round_no > 0 and drive.noRounds and next_round_no <= drive.noRounds:
+                    round_name = drive.InterviewRounds[next_round_no - 1] if drive.InterviewRounds and next_round_no <= len(drive.InterviewRounds) else f"Round {next_round_no}"
+                    awaiting_list.append({
+                        'application_id': app.id,
+                        'student_id': app.student.id,
+                        'student': {
+                            'name': app.student.name,
+                            'roll_no': app.student.roll_no,
+                            'user_id': app.student.user_id
+                        },
+                        'round_no': next_round_no,
+                        'round_name': round_name
+                    })
+
+            drive.awaiting_scheduling = awaiting_list
 
         return drives_with_interviews, 200
 
@@ -1003,6 +1065,7 @@ company_interview_update_parser = reqparse.RequestParser()
 company_interview_update_parser.add_argument('action', type=str, required=True, choices=('reschedule', 'cancel'))
 company_interview_update_parser.add_argument('datetime', type=inputs.datetime_from_iso8601)
 company_interview_update_parser.add_argument('reason', type=str, required=True)
+company_interview_update_parser.add_argument('location', type=str)
 
 class CompanyInterviewUpdateAPI(Resource):
     @auth_required('token')
@@ -1026,11 +1089,14 @@ class CompanyInterviewUpdateAPI(Resource):
         if action == 'reschedule':
             if not args['datetime']:
                 return {"message": "Datetime is required for rescheduling"}, 400
+            if not args.get('location') or not args['location'].strip():
+                return {"message": "Location or meeting link is required for rescheduling."}, 400
             new_dt = args['datetime']
-            now = datetime.now(new_dt.tzinfo) if new_dt.tzinfo else datetime.now()
+            now = datetime.now(new_dt.tzinfo) if new_dt.tzinfo else get_ist_now()
             if new_dt <= now:
                 return {"message": "Rescheduled interview time must be in the future."}, 400
             interview.datetime = new_dt
+            interview.location_or_link = args['location']
             interview.remarks = f"Rescheduled: {args['reason']}"
             create_notification(interview.application.student.user_id, f"Interview Rescheduled: Your interview for '{interview.application.drive.JobTitle}' has been rescheduled to {interview.datetime}.", "success")
         elif action == 'cancel':
@@ -1171,7 +1237,7 @@ class ViewApplication(Resource):
             'offer_message': application.placement.message if application.placement else None,
             'offer_sent_date': application.placement.offer_sent_date.isoformat() if application.placement and application.placement.offer_sent_date else None,
             'offer_status': application.placement.offer_status if application.placement else None,
-            'is_offer_expired': (application.placement.offer_expiry_date < datetime.now().date()) if (application.placement and application.placement.offer_expiry_date) else False,
+            'is_offer_expired': (application.placement.offer_expiry_date < get_ist_date()) if (application.placement and application.placement.offer_expiry_date) else False,
             'drive': {
                 'company_name': drive.company_name,
                 'JobTitle': drive.JobTitle
@@ -1220,7 +1286,7 @@ class ViewApplication(Resource):
                 drive = application.drive
                 if drive.noRounds and latest_interview.round_no == drive.noRounds:
                     application.status = 'Selected'
-                    application.selected_date = datetime.now().date()
+                    application.selected_date = get_ist_date()
                     create_notification(application.student.user_id, f"Congratulations! You passed the final interview round for '{drive.JobTitle}'. Your offer is pending.", "success")
                 else:
                     application.status = 'Interviewing'
@@ -1240,7 +1306,7 @@ class ViewApplication(Resource):
                 application.previous_status = application.status
             application.status = 'Rejected'
             application.rejection_reason = args.get('rejection_reason') or 'No reason provided.'
-            application.updated_time = datetime.now()
+            application.updated_time = get_ist_now()
             
             latest_interview = Interview.query.filter_by(application_id=application_id).order_by(Interview.round_no.desc()).first()
             if latest_interview and latest_interview.status == 'scheduled':
@@ -1258,6 +1324,24 @@ class ViewApplication(Resource):
         
         # Case 2: Restoration. `status` is not sent, `rejection_reason` is null.
         elif new_status is None and 'rejection_reason' in request.json and args.get('rejection_reason') is None:
+            # Check if the student is already hired in another drive
+            hired_elsewhere = Application.query.filter(
+                Application.student_id == application.student_id,
+                Application.status == 'Hired',
+                Application.id != application.id
+            ).first()
+            if hired_elsewhere:
+                return {"message": "Cannot restore application: This student has already been hired for another job."}, 400
+
+            # Check if student's user account is deactivated/suspended
+            if not application.student.user.active:
+                return {"message": "Cannot restore application: The student's account is currently suspended or deactivated."}, 400
+
+            # Check if the rejection was due to student declining the offer
+            if (application.rejection_reason == 'Offer rejected by student.' or 
+                (application.placement and application.placement.offer_status == 'Rejected')):
+                return {"message": "Cannot restore application: The offer was officially declined by the student."}, 400
+
             application.rejection_reason = None
             application.rejection_revoke_note = args.get('note_for_student')
             
@@ -1286,11 +1370,11 @@ class ViewApplication(Resource):
         # Case 3: Normal status update.
         elif new_status and old_status != new_status:
             application.status = new_status
-            application.updated_time = datetime.now()
+            application.updated_time = get_ist_now()
     
             latest_interview = Interview.query.filter_by(application_id=application_id).order_by(Interview.round_no.desc()).first()
             if new_status == 'Selected':
-                application.selected_date = datetime.now().date()
+                application.selected_date = get_ist_date()
                 if latest_interview and latest_interview.status == 'scheduled':
                     latest_interview.status = 'completed'
                     latest_interview.result = 'passed'
@@ -1325,7 +1409,7 @@ class ViewApplication(Resource):
         
         standard_dt = args.get('datetime')
         if standard_dt:
-            now = datetime.now(standard_dt.tzinfo) if standard_dt.tzinfo else datetime.now()
+            now = datetime.now(standard_dt.tzinfo) if standard_dt.tzinfo else get_ist_now()
             if standard_dt <= now:
                 return {"message": "Interviews can only be scheduled for a future time."}, 400
 
@@ -1421,7 +1505,7 @@ class SendOfferAPI(Resource):
             except (ValueError, TypeError):
                 return {"message": "Invalid date format. Use YYYY-MM-DD"}, 400
             
-            today = datetime.now().date()
+            today = get_ist_date()
             if offer_expiry <= today:
                 return {"message": "Offer expiry date must be in the future."}, 400
             if joining_date <= today:
@@ -1463,7 +1547,7 @@ class PostedDriveStats(Resource):
         total_applicants = len(applications)
         shortlisted = len([app for app in applications if app.status == 'Shortlisted'])
         hired = len([app for app in applications if app.status == 'Hired'])
-        new_count = len([app for app in applications if app.application_datetime and app.application_datetime.date() == (datetime.now() - timedelta(days=1)).date()])
+        new_count = len([app for app in applications if app.application_datetime and app.application_datetime.date() == (get_ist_now() - timedelta(days=1)).date()])
         return {
             "total_applicants": total_applicants,
             "shortlisted": shortlisted,
@@ -1498,7 +1582,7 @@ class CompanyOfferExtendAPI(Resource):
         except ValueError:
             return {"message": "Invalid date format. Use YYYY-MM-DD"}, 400
             
-        if new_expiry <= datetime.now().date():
+        if new_expiry <= get_ist_date():
             return {"message": "The extended expiry date must be in the future."}, 400
             
         if placement.offer_expiry_date and new_expiry <= placement.offer_expiry_date:
@@ -1552,7 +1636,7 @@ class CloseRoundAPI(Resource):
             app.status = 'Rejected'
             app.rejection_reason = remarks
             app.rejection_revoke_note = student_facing_remarks
-            app.updated_time = datetime.now()
+            app.updated_time = get_ist_now()
             
             create_notification(app.student.user_id, f"Your application for '{drive.JobTitle}' has been rejected because the position was closed.", "warning")
             count += 1
@@ -1583,7 +1667,7 @@ class CloseRoundAPI(Resource):
                 app.status = 'Rejected'
                 app.rejection_reason = remarks
                 app.rejection_revoke_note = student_facing_remarks
-                app.updated_time = datetime.now()
+                app.updated_time = get_ist_now()
                 create_notification(app.student.user_id, f"Your application for '{drive.JobTitle}' has been rejected because the position was closed.", "warning")
                 count += 1
                 
@@ -1625,7 +1709,7 @@ class RejectIneligibleApplicationsAPI(Resource):
                     app.previous_status = app.status
                 app.status = 'Rejected'
                 app.rejection_reason = f"Eligibility lost due to profile update (Mismatch: {', '.join(issues)})"
-                app.updated_time = datetime.now()
+                app.updated_time = get_ist_now()
                 
                 create_notification(
                     app.student.user_id,

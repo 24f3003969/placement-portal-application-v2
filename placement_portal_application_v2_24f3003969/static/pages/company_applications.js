@@ -178,10 +178,7 @@ const GettedApplications = {
                                                     <div class="d-flex align-items-center gap-2 mb-0">
                                                         <span class="fw-bold text-dark mb-0" style="cursor: pointer;" @click="viewApplication(app.id)">{{ app.student.name }}</span>
                                                         <span v-if="app.available_immediately != false" class="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5" style="font-size: 0.65rem;">Immediate</span>
-                                                        <span v-else class="d-inline-flex flex-wrap align-items-center gap-1">
-                                                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-0.5" style="font-size: 0.65rem;" :title="app.availability_remarks">Delayed</span>
-                                                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-0.5" style="font-size: 0.65rem;">(from {{formatDateTime(app.available_from, false)}})</span>
-                                                        </span>
+                                                        <span v-else class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-0.5" style="font-size: 0.65rem; cursor: pointer;" @click.stop="showAvailabilityDetails(app)" title="Click to view availability details">Delayed ℹ️</span>
                                                     </div>
                                                     <small class="text-muted font-monospace">{{ app.student.roll_no }} | CGPA: <strong class="text-primary">{{app.student.cgpa}}</strong></small>
                                                     <span v-if="app.is_currently_eligible === false" class="badge bg-danger text-white ms-1" :title="app.eligibility_issues ? app.eligibility_issues.join(', ') : 'Profile ineligible'">⚠️ Ineligible</span>
@@ -207,7 +204,7 @@ const GettedApplications = {
                         </div>
                     </div>
 
-                    <!-- TAB 2: ACTIVE EVALUATION GAUNTLET -->
+                    <!-- TAB 2: ACTIVE EVALUATION -->
                     <div v-if="activeStatus === 'Shortlisted'" class="table-responsive table-scroll-md bg-white rounded border shadow-sm text-start">
                         <div v-if="!groupedApplications.awaitingSchedule.length && !groupedApplications.interviewing.length">
                             <h5 class="fw-bold mb-0 text-center py-3 text-muted">No Candidates In Pipeline</h5>
@@ -264,10 +261,7 @@ const GettedApplications = {
                                                     <div class="d-flex align-items-center gap-2 mb-0">
                                                         <span class="fw-bold text-dark mb-0" style="cursor: pointer;" @click="viewApplication(app.id)">{{ app.student.name }}</span>
                                                         <span v-if="app.available_immediately != false" class="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5" style="font-size: 0.65rem;">Immediate</span>
-                                                        <span v-else class="d-inline-flex flex-wrap align-items-center gap-1">
-                                                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-0.5" style="font-size: 0.65rem;" :title="app.availability_remarks">Delayed</span>
-                                                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-0.5" style="font-size: 0.65rem;">(from {{formatDateTime(app.available_from,false)}})</span>
-                                                        </span>
+                                                        <span v-else class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-0.5" style="font-size: 0.65rem; cursor: pointer;" @click.stop="showAvailabilityDetails(app)" title="Click to view availability details">Delayed ℹ️</span>
                                                     </div>
                                                     <small class="text-muted font-monospace">{{ app.student.roll_no }} | CGPA: <strong class="text-primary">{{app.student.cgpa}}</strong></small>
                                                     <span v-if="app.is_currently_eligible === false" class="badge bg-danger text-white ms-1" :title="app.eligibility_issues ? app.eligibility_issues.join(', ') : 'Profile ineligible'">⚠️ Ineligible</span>
@@ -281,9 +275,19 @@ const GettedApplications = {
                                         <td>
                                             <!-- Explicit Pipeline Status -->
                                             <div v-if="app.interview_datetime === 'N/A' || app.interview_datetime === 'Not Scheduled' || !app.interview_datetime">
-                                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-0.5">
+                                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-0.5 mb-1">
                                                     <i class="bi bi-calendar-x me-1"></i>Awaiting Round {{ app.round_no || 1 }} Schedule
                                                 </span>
+                                                <!-- Previous round briefing remarks display -->
+                                                <div v-if="app.previous_round_remarks || app.previous_round_student_remarks" class="mt-1.5 p-1.5 bg-light rounded border border-light-subtle" style="font-size: 0.72rem; line-height: 1.25;">
+                                                    <div class="fw-bold text-secondary mb-0.5">Prev Round (Round {{ app.previous_round_no }}) Feedback:</div>
+                                                    <div v-if="app.previous_round_remarks" class="text-dark text-truncate" style="max-width: 175px;" :title="app.previous_round_remarks">
+                                                        <i class="bi bi-chat-left-text-fill text-muted me-1"></i><strong>Internal:</strong> {{ app.previous_round_remarks }}
+                                                    </div>
+                                                    <div v-if="app.previous_round_student_remarks" class="text-dark text-truncate" style="max-width: 175px;" :title="app.previous_round_student_remarks">
+                                                        <i class="bi bi-chat-right-text-fill text-info me-1"></i><strong>Student Note:</strong> {{ app.previous_round_student_remarks }}
+                                                    </div>
+                                                </div>
                                             </div>
                                             <div v-else>
                                                 <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2 py-0.5 mb-1">
@@ -294,12 +298,12 @@ const GettedApplications = {
                                         </td>
                                         <td class="text-center align-middle" style="width: 200px;">
                                             <!-- High Visibility Alert Badge -->
-                                            <div v-if="app.interview_datetime && app.interview_datetime !== 'N/A' && isInterviewToday(app.interview_datetime)" class="text-danger small fw-bold mb-1 animate-pulse bg-danger-subtle rounded py-0.5 border border-danger-subtle">
+                                            <div v-if="app.interview_datetime && app.interview_datetime !== 'N/A' && app.interview_datetime !== 'Not Scheduled' && isInterviewToday(app.interview_datetime)" class="text-danger small fw-bold mb-1 animate-pulse bg-danger-subtle rounded py-0.5 border border-danger-subtle">
                                                 <i class="bi bi-alarm-fill me-1"></i>Interview Today!
                                             </div>
         
                                             <!-- Action Buttons -->
-                                            <button v-if="app.interview_datetime === 'N/A' || !app.interview_datetime" @click="openScheduleModalDirect(app)" class="btn btn-primary btn-sm px-2 py-0.5 w-100 fw-bold shadow-sm mb-1" style="font-size: 0.75rem;"><i class="bi bi-calendar-event me-1"></i>Schedule Slot</button>
+                                            <button v-if="app.interview_datetime === 'N/A' || app.interview_datetime === 'Not Scheduled' || !app.interview_datetime" @click="openScheduleModalDirect(app)" class="btn btn-primary btn-sm px-2 py-0.5 w-100 fw-bold shadow-sm mb-1" style="font-size: 0.75rem;"><i class="bi bi-calendar-event me-1"></i>Schedule Slot</button>
                                             <button v-else @click="manageInterviews(app.drive.DriveID, app.student.roll_no)" class="btn btn-dark btn-sm px-2 py-0.5 w-100 fw-bold shadow-sm mb-1" style="font-size: 0.75rem;"><i class="bi bi-camera-video me-1"></i>View Interview</button>
                                         </td>
                                     </tr>
@@ -333,7 +337,7 @@ const GettedApplications = {
                                                     <div class="d-flex align-items-center gap-2 mb-0">
                                                         <span class="fw-bold text-dark mb-0" style="cursor: pointer;" @click="viewApplication(app.id)">{{ app.student.name }}</span>
                                                         <span v-if="app.student.available_immediately != false" class="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5" style="font-size: 0.65rem;">Immediate</span>
-                                                        <span v-else class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-0.5" style="font-size: 0.65rem;" :title="app.student.availability_remarks">Delayed</span>
+                                                        <span v-else class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-0.5" style="font-size: 0.65rem; cursor: pointer;" @click.stop="showAvailabilityDetails(app)" title="Click to view availability details">Delayed ℹ️</span>
                                                     </div>
                                                     <small class="text-muted font-monospace">{{ app.student.roll_no }}</small>
                                                 </div>
@@ -444,7 +448,9 @@ const GettedApplications = {
                                         <td><span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-0.5"><i class="bi bi-x-octagon me-1"></i>Rejected</span></td>
                                         <td><div class="p-1 bg-light border rounded small">{{ app.rejection_reason || 'No failure log reason entered.' }}</div></td>
                                         <td class="text-center">
-                                            <button @click="openRestoreAuditOverrideModal(app)" class="btn btn-outline-warning text-dark btn-sm py-0.5 fw-bold" style="font-size: 0.75rem;"><i class="bi bi-arrow-counterclockwise me-1"></i> Restore</button>
+                                            <span v-if="app.student_is_hired" class="badge bg-secondary text-white px-2 py-1" title="This candidate is already hired for another job."><i class="bi bi-lock-fill me-1"></i> Locked (Hired)</span>
+                                            <span v-else-if="app.rejection_reason === 'Offer rejected by student.' || app.offer_status === 'Rejected'" class="badge bg-secondary text-white px-2 py-1" title="This candidate officially declined the offer letter."><i class="bi bi-lock-fill me-1"></i> Locked (Declined)</span>
+                                            <button v-else @click="openRestoreAuditOverrideModal(app)" class="btn btn-outline-warning text-dark btn-sm py-0.5 fw-bold" style="font-size: 0.75rem;"><i class="bi bi-arrow-counterclockwise me-1"></i> Restore</button>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -487,7 +493,7 @@ const GettedApplications = {
                             <button class="btn btn-success px-4 btn-sm fw-bold" @click="shortlistApplication(selectedApplication.id)">Shortlist Candidate</button>
                         </template>
 
-                        <template v-else-if="(selectedApplication.status === 'Shortlisted' || selectedApplication.status === 'Interview') && selectedApplication.interview_datetime === 'N/A'">
+                        <template v-else-if="(selectedApplication.status === 'Shortlisted' || selectedApplication.status === 'Interview' || selectedApplication.status === 'Interviewing') && (selectedApplication.interview_datetime === 'N/A' || selectedApplication.interview_datetime === 'Not Scheduled' || !selectedApplication.interview_datetime)">
                             <button class="btn btn-danger px-4 btn-sm fw-bold" @click="openRejectionModalFromDetails">Reject Candidate From Pipeline</button>
                             <button class="btn btn-success px-4 btn-sm fw-bold" @click="openScheduleSection"><i class="bi bi-calendar-check me-1"></i>Schedule Interview Round</button>
                         </template>
@@ -509,6 +515,30 @@ const GettedApplications = {
                                 <button class="btn btn-success btn-sm px-4 fw-bold shadow-sm" @click="scheduleInterview">Commit Slot Verification Schedule</button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- DELAYED AVAILABILITY DETAILS MODAL -->
+        <div class="modal fade" id="availabilityDetailsModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow-lg" v-if="selectedAvailabilityApp">
+                    <div class="modal-header bg-warning text-dark border-0">
+                        <h5 class="modal-title fw-bold"><i class="bi bi-clock-history me-2"></i>Delayed Availability Details</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-3 text-start">
+                        <p class="mb-2"><strong>Candidate:</strong> {{ selectedAvailabilityApp.student?.name || 'N/A' }}</p>
+                        <p class="mb-2"><strong>Available From Date:</strong> <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5">{{ formatDateTime(selectedAvailabilityApp.available_from || selectedAvailabilityApp.student?.available_from, false) }}</span></p>
+                        <hr class="my-2">
+                        <label class="fw-bold small text-muted d-block mb-1">Reason for Delayed Availability:</label>
+                        <div class="p-2 bg-light border rounded small text-dark" style="white-space: pre-wrap;">
+                            {{ selectedAvailabilityApp.availability_remarks || selectedAvailabilityApp.student?.availability_remarks || 'No reason provided.' }}
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-0">
+                        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
                     </div>
                 </div>
             </div>
@@ -652,6 +682,8 @@ const GettedApplications = {
             sortby: 'none',
             selectedApplication: null,
             selectedApplicationForUpdate: null,
+            selectedAvailabilityApp: null,
+            availabilityModal: null,
             selectedType: '',
             minCGPA: null,
             searchQuery: '',
@@ -765,7 +797,7 @@ const GettedApplications = {
                         case 'Shortlisted':
                         case 'Interview': 
                         case 'Interviewing':
-                            if (app.interview_datetime === 'N/A' || !app.interview_datetime) {
+                            if (app.interview_datetime === 'N/A' || app.interview_datetime === 'Not Scheduled' || !app.interview_datetime) {
                                 groups.awaitingSchedule.push(app);
                             } else {
                                 groups.interviewing.push(app);
@@ -871,7 +903,7 @@ const GettedApplications = {
         getStatCountValue(val) {
             if (val === 'total_applications') return this.allApplications.length;
             if (val === 'pending_applications') return this.allApplications.filter(a => a.status === 'Applied' || a.status === 'Pending').length;
-            if (val === 'scheduled_interviews') return this.allApplications.filter(a => (a.status === 'Shortlisted' || a.status === 'Interview') && a.interview_datetime !== 'N/A' && a.interview_datetime).length;
+            if (val === 'scheduled_interviews') return this.allApplications.filter(a => (a.status === 'Shortlisted' || a.status === 'Interview' || a.status === 'Interviewing') && a.interview_datetime !== 'N/A' && a.interview_datetime !== 'Not Scheduled' && a.interview_datetime).length;
             if (val === 'rejected') return this.allApplications.filter(a => a.status === 'Rejected').length;
             return this.stats[val] || 0;
         },
@@ -974,6 +1006,11 @@ const GettedApplications = {
             const targetAppId = this.selectedApplication.application_id || this.selectedApplication.id;
             if (!targetAppId) return;
 
+            if (!this.interview.location || !this.interview.location.trim()) {
+                alert('Location or meeting link is required.');
+                return;
+            }
+
             if (new Date(this.interview.datetime) <= new Date()) {
                 alert('Interview date and time must be set to a future date and time.');
                 return;
@@ -987,7 +1024,7 @@ const GettedApplications = {
                         'Authentication-Token':localStorage.getItem('token')
                     },
                     body:JSON.stringify({
-                        status:'Shortlisted',
+                        status:'Interviewing',
                         datetime: this.interview.datetime,
                         location: this.interview.location
                     })
@@ -1004,6 +1041,12 @@ const GettedApplications = {
                 console.error(err);
                 alert("An error occurred while scheduling the interview.");
             }
+        },
+        showAvailabilityDetails(app) {
+            this.selectedAvailabilityApp = app;
+            this.$nextTick(() => {
+                this.availabilityModal.show();
+            });
         },
         openRejectionModalDirect(app) {
             this.selectedApplicationForUpdate = app;
@@ -1127,7 +1170,7 @@ const GettedApplications = {
             }, 3000); 
         },
         runStrictSelectAuditGuard(app) {
-            if (app.interview_datetime === 'N/A' || !app.interview_datetime) {
+            if (app.interview_datetime === 'N/A' || app.interview_datetime === 'Not Scheduled' || !app.interview_datetime) {
                 alert(`[CRITICAL SECURITY WARNING]: You are advancing a candidate profile who has not passed live interviewing round steps.`);
                 return;
             }
@@ -1254,11 +1297,16 @@ const GettedApplications = {
         this.sendOfferModal = new bootstrap.Modal(document.getElementById('sendOfferModal'));
         this.restoreAuditOverrideModal = new bootstrap.Modal(document.getElementById('restoreAuditOverrideModal'));
         this.extendOfferModal = new bootstrap.Modal(document.getElementById('extendOfferModal'));
+        this.availabilityModal = new bootstrap.Modal(document.getElementById('availabilityDetailsModal'));
 
         document.getElementById('applicationDetailModal').addEventListener('hidden.bs.modal', () => {
             this.selectedApplication = null;
             this.showSchedule = false;
             this.interview = { datetime: '', location: '' };
+        });
+
+        document.getElementById('availabilityDetailsModal').addEventListener('hidden.bs.modal', () => {
+            this.selectedAvailabilityApp = null;
         });
 
         document.getElementById('extendOfferModal').addEventListener('hidden.bs.modal', () => {
