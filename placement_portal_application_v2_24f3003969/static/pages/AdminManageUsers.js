@@ -3,7 +3,7 @@ import CompanyProfile from '../components/company_profile.js';
 import { formatDateTime } from '../utils/formatDateTime.js';
 const AdminManageUsers = {
     template: `
-    <div class="container-fluid mt-2">
+    <div class="container-fluid mt-2 pb-5">
         <div class="position-relative mb-4">
             <div class="position-absolute w-100 h-100 d-flex justify-content-center align-items-center" style="pointer-events: none; z-index: 0;">
                 <h2 class="fw-bold mb-0 text-center" style="pointer-events: auto;">Manage Users</h2>

@@ -772,7 +772,7 @@ def generate_daily_reminders_task(self):
                 f"- *Departments:* {departments_str}\n"
                 f"- *Minimum CGPA:* {min_cgpa_str}\n"
                 f"- *Required Skills:* {skills_str}\n\n"
-                f"👉 Eligible students, please login to the portal and submit your application: http://127.0.0.1:5000/login"
+                f"👉 Eligible students, please login to the portal and submit your application: http://127.0.0.1:5000"
             )
 
             response = requests.post(

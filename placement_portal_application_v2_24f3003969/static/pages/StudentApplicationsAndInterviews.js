@@ -3,7 +3,7 @@ import { formatDateTime } from '../utils/formatDateTime.js';
 
 const StudentApplicationsAndInterviews = {
     template: `
-    <div class="container mt-4">
+    <div class="container my-4">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h3 class="fw-bold mb-0">My Applications & Interviews</h3>
             <button class="btn btn-outline-secondary btn-sm shadow-sm" @click="goToExport">

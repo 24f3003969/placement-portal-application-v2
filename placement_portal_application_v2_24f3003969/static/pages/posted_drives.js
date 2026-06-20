@@ -43,7 +43,7 @@ const PostedDrives={
                 </div>
             </div>
 
-            <div class="col-md-7">
+            <div class="col-md-8">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h4 class="fw-bold mb-0 pt-2">Posted Placement Drives</h4>
                     <button class="btn btn-success btn-sm" data-bs-toggle="modal" 
@@ -51,7 +51,7 @@ const PostedDrives={
                     <span class="badge bg-primary rounded-pill">{{ active_count }} Active</span>
                 </div>
                 <hr>
-                <div class="row mb-4">
+                <div class="row mb-2">
                     <div class="col-md-12">
                         <div class="input-group shadow-sm">
                             <input 
@@ -81,7 +81,7 @@ const PostedDrives={
                     </div>
                 </div>
             </div>
-            <div class="col-md-3" id="drive-insights">
+            <div class="col-md-2" id="drive-insights">
                 <div class="card border-0 shadow-sm p-4 rounded-4 bg-light" style="position: sticky; top: 20px;">
                     <h5 class="fw-bold mb-3">Top Performing Drives</h5>
                     <div v-if="topDrives.length > 0">
