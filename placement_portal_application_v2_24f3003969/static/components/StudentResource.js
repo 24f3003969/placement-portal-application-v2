@@ -67,7 +67,7 @@ const StudentResource = {
                     </div>
 
                     <div v-if="currentUserRole === 'comp' && drive.Status === 'Rejected'">
-                        <button @click="$emit('viewNote', drive.Remark)" class="btn btn-outline-warning btn-sm">View Note</button>
+                        <button @click="$emit('viewNote', drive)" class="btn btn-outline-warning btn-sm">View Note</button>
                         <button @click="$emit('view', drive)" class="btn btn-outline-info btn-sm ms-2">View</button>
                     </div>
                     <div v-else-if="currentUserRole === 'comp'">
@@ -78,7 +78,7 @@ const StudentResource = {
                     <div v-if="currentUserRole === 'admin'">
                         <button @click="$emit('view', drive)" class="btn btn-outline-info btn-sm">View Insights</button>
                         <button @click="$emit('interviews', drive)" class="btn btn-outline-secondary btn-sm ms-2">Interviews</button>
-                        <button v-if="drive.Remark" @click="$emit('viewNote', drive.Remark)" class="btn btn-outline-warning btn-sm ms-2">
+                        <button v-if="drive.Remark" @click="$emit('viewNote', drive)" class="btn btn-outline-warning btn-sm ms-2">
                             {{ drive.Status === 'Rejected' ? 'View Remark' : 'View Reason' }}
                         </button>
                     </div>

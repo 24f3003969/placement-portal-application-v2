@@ -178,10 +178,13 @@ const StudentApplicationsAndInterviews = {
                                     </td>
                                     <td>{{ formatDateTime(interview.datetime) }}</td>
                                     <td>
-                                        <a v-if="isUrl(interview.location_or_link)" :href="interview.location_or_link" target="_blank" class="btn btn-sm btn-outline-primary">
-                                            Join Meeting <i class="bi bi-box-arrow-up-right"></i>
-                                        </a>
-                                        <span v-else>{{ interview.location_or_link }}</span>
+                                        <span v-if="interview.status === 'suspended'" class="text-danger fw-semibold">paused</span>
+                                        <span v-else>
+                                            <a v-if="isUrl(interview.location_or_link)" :href="interview.location_or_link" target="_blank" class="btn btn-sm btn-outline-primary">
+                                                Join Meeting <i class="bi bi-box-arrow-up-right"></i>
+                                            </a>
+                                            <span v-else>{{ interview.location_or_link }}</span>
+                                        </span>
                                     </td>
                                     <td class="text-end pe-4">
                                         <button v-if="interview.remarks" @click="showRemark(interview.remarks)" class="btn btn-sm btn-link p-0 text-decoration-none">View Notes</button>
@@ -320,10 +323,13 @@ const StudentApplicationsAndInterviews = {
                                             </td>
                                             <td>{{ formatDateTime(interview.datetime) }}</td>
                                             <td>
-                                                <a v-if="isUrl(interview.location_or_link) && interview.status === 'scheduled'" :href="interview.location_or_link" target="_blank" class="btn btn-xs btn-outline-primary px-2 py-1 rounded-pill">
-                                                    <i class="bi bi-video"></i> Join Meeting
-                                                </a>
-                                                <span v-else class="small text-muted">{{ interview.location_or_link }}</span>
+                                                <span v-if="interview.status === 'suspended'" class="text-danger fw-semibold">paused</span>
+                                                <span v-else>
+                                                    <a v-if="isUrl(interview.location_or_link) && interview.status === 'scheduled'" :href="interview.location_or_link" target="_blank" class="btn btn-xs btn-outline-primary px-2 py-1 rounded-pill">
+                                                        <i class="bi bi-video"></i> Join Meeting
+                                                    </a>
+                                                    <span v-else class="small text-muted">{{ interview.location_or_link }}</span>
+                                                </span>
                                             </td>
                                             <td>
                                                 <span v-if="interview.status === 'scheduled' && new Date(interview.datetime) < new Date()" class="badge bg-warning text-dark">result awaiting</span>

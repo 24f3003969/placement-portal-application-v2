@@ -1063,10 +1063,11 @@ class AdminManageDrivesAPI(Resource):
             drive.Remark = remarks
 
         from application.tasks import send_drive_status_update_email_task, close_specific_drive_task
+        
         if status == 'Rejected':
             send_drive_status_update_email_task.delay(drive.DriveID, 'Rejected', remarks)
             create_notification(drive.company.user_id, f"Your placement drive '{drive.JobTitle}' has been rejected by the administrator. Remark: {remarks or 'No remark provided.'}", "warning")
-        elif status in(['Active','Pending']):
+        elif status == 'Active':
             send_drive_status_update_email_task.delay(drive.DriveID, 'Active')
             deadline_date = drive.ApplyDeadline
             if deadline_date:
@@ -1080,7 +1081,31 @@ class AdminManageDrivesAPI(Resource):
                 
                 utc_deadline = localized_deadline.astimezone(ZoneInfo('UTC'))
                 close_specific_drive_task.apply_async((drive.DriveID,), eta=utc_deadline)
+            if previous_status == 'Suspended':
+                drive.Remark = None
                 
+                # Reactivation: restore status of all applications and interviews
+                applications = Application.query.filter_by(DriveID=drive.DriveID).all()
+                from application.tasks import send_application_status_update_email_task
+                for app in applications:
+                    if app.previous_status:
+                        app.status = app.previous_status
+                        app.previous_status = None
+                    send_application_status_update_email_task.delay(app.id)
+                    
+                interviews = Interview.query.join(Application).filter(Application.DriveID == drive.DriveID).all()
+                for interview in interviews:
+                    was_suspended = (interview.status == 'suspended')
+                    if interview.previous_status:
+                        interview.status = interview.previous_status
+                        interview.previous_status = None
+                    
+                    if was_suspended and interview.status == 'scheduled':
+                        create_notification(
+                            interview.application.student.user_id,
+                            f"Your interview for '{interview.application.drive.JobTitle}' on '{interview.datetime}' has been restored.",
+                            "success"
+                        )
             msg = f"Your placement drive '{drive.JobTitle}' has been re-activated and is now Active." if previous_status == 'Suspended' else f"Your placement drive '{drive.JobTitle}' has been approved by the administrator."
             create_notification(drive.company.user_id, msg, "success")
         elif status == 'Suspended':
@@ -1098,23 +1123,73 @@ class AdminManageDrivesAPI(Resource):
                 )
             send_drive_suspension_emails_to_students_task.delay(drive.DriveID)
             
-            # Suspend upcoming scheduled interviews
+            # Suspend all applications of this drive
+            for app in applications:
+                if app.status != 'Suspended':
+                    app.previous_status = app.status
+                    app.status = 'Suspended'
+            
+            # Notify about upcoming scheduled interviews
             upcoming_interviews = Interview.query.join(Application).filter(
                 Application.DriveID == drive.DriveID,
                 Interview.datetime > get_ist_now(),
                 Interview.status == 'scheduled'
             ).all()
             for interview in upcoming_interviews:
-                interview.previous_status = interview.status
-                interview.status = 'suspended'
                 create_notification(
                     interview.application.student.user_id,
                     f"Your interview for '{interview.application.drive.JobTitle}' on '{interview.datetime}' has been suspended temporarily.",
                     "warning"
                 )
+                
+            # Suspend all interviews of this drive
+            interviews = Interview.query.join(Application).filter(Application.DriveID == drive.DriveID).all()
+            for interview in interviews:
+                if interview.status != 'suspended':
+                    interview.previous_status = interview.status
+                    interview.status = 'suspended'
         elif status == 'Application Closed':
             send_drive_status_update_email_task.delay(drive.DriveID, 'Application Closed', remarks)
             create_notification(drive.company.user_id, f"Your placement drive '{drive.JobTitle}' has been closed by the administrator. Reason: {remarks or 'No reason provided.'}", "warning")
+            
+            # Get all applications for this drive that are not in 'Selected' or 'Hired' state
+            unhired_apps = Application.query.filter(
+                Application.DriveID == drive.DriveID,
+                Application.status.notin_(['Selected', 'Hired'])
+            ).all()
+            
+            from application.tasks import send_application_status_update_email_task
+            
+            for app in unhired_apps:
+                if app.status != 'Rejected':
+                    # Only set previous_status if it is not already set (e.g., if suspended)
+                    if not app.previous_status:
+                        app.previous_status = app.status
+                    app.status = 'Rejected'
+                    app.rejection_reason = remarks or 'Drive closed by admin'
+                    
+                    create_notification(
+                        app.student.user_id,
+                        f"Application status changed to Rejected for '{drive.JobTitle}'. Reason: Drive closed",
+                        "warning"
+                    )
+                    send_application_status_update_email_task.delay(app.id)
+            
+            # Cancel all upcoming scheduled/pending/suspended interviews for this drive
+            app_ids = [app.id for app in unhired_apps]
+            if app_ids:
+                interviews = Interview.query.filter(
+                    Interview.application_id.in_(app_ids),
+                    Interview.status.in_(['scheduled', 'pending', 'suspended'])
+                ).all()
+                for interview in interviews:
+                    interview.status = 'canceled'
+                    interview.remarks = remarks or 'Drive closed by admin'
+                    create_notification(
+                        interview.application.student.user_id,
+                        f"Your interview for '{drive.JobTitle}' has been canceled because the drive has closed.",
+                        "warning"
+                    )
 
         db.session.commit()
         cache.clear()

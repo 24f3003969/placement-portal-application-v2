@@ -48,7 +48,7 @@ const InterviewRoundView = {
                             <span v-if="interview.status === 'suspended'" class="badge bg-warning text-dark ms-1 shadow-xs fw-semibold px-1.5 py-0.5" style="font-size: 0.7rem;">Temporarily on Hold</span>
                         </td>
                         <td>
-                            <div v-if="interview.status === 'suspended'" class="small text-muted"><i class="bi bi-pause-circle-fill text-warning me-1"></i>Link Paused</div>
+                            <div v-if="interview.status === 'suspended'" class="text-danger fw-semibold">paused</div>
                             <div v-else>
                                 <a v-if="isUrl(interview.location_or_link)" :href="interview.location_or_link" target="_blank" class="btn btn-xs btn-outline-primary px-2 py-0.5 rounded" style="font-size: 0.72rem;">
                                     <i class="bi bi-video"></i> Join Meeting

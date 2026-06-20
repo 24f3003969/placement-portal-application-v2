@@ -105,8 +105,8 @@ class PublicStatsAPI(Resource):
         try:
             # Fetch the clean dictionary data from the cache helper
             cached_data = compute_metrics()
-            # Return using Flask-RESTful's direct payload structure
-            return cached_data, 200
+            # Return using Flask-RESTful's direct payload structure with Cache-Control headers
+            return cached_data, 200, {'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'}
         except Exception as e:
             print(f"Exception encountered in PublicStatsAPI pipeline: {e}")
             return {"message": "An error occurred while generating statistics.", "error": str(e)}, 500

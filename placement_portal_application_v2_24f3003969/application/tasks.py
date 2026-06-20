@@ -385,9 +385,9 @@ def send_drive_status_update_email_task(drive_id, status, remark=None):
         company_name = company.company_name
 
         if status == 'Active':
-            subject = f"Your Placement Drive '{job_title}' has been Approved!"
+            subject = f"Your Placement Drive '{job_title}' has been Activated!"
             status_text = "Active"
-            body_content = f"<p>This is to inform you that your placement drive for the position of <strong>'{job_title}'</strong> has been reviewed and approved by the administration.</p><p>The drive is now active and visible to eligible students.</p>"
+            body_content = f"<p>This is to inform you that your placement drive for the position of <strong>'{job_title}'</strong> has been activated by the administration.</p><p>The drive is now active and visible to eligible students.</p>"
         elif status == 'Rejected':
             subject = f"Your Placement Drive '{job_title}' has been Rejected"
             status_text = "Rejected"

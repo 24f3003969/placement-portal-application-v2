@@ -303,39 +303,40 @@ class DriveApplication(Resource):
                 if drive.Status == 'Active':
                     drive.Status = 'Application Closed'
                     
-                    # Get all applications for this drive that are not in 'Hired' state
+                    # Get all applications for this drive that are not in 'Selected' or 'Hired' state
                     unhired_apps = Application.query.filter(
                         Application.DriveID == drive_id,
-                        Application.status != 'Hired'
+                        Application.status.notin_(['Selected', 'Hired'])
                     ).all()
                     
                     from application.tasks import send_application_status_update_email_task
                     
                     for app in unhired_apps:
                         if app.status != 'Rejected':
-                            app.previous_status = app.status
+                            if not app.previous_status:
+                                app.previous_status = app.status
                         app.status = 'Rejected'
-                        app.rejection_reason = 'Drive closed'
+                        app.rejection_reason = 'Drive closed by recruiter'
                         
                         # Create dynamic in-app notification
                         create_notification(
                             app.student.user_id,
-                            f"Application status changed to Rejected for '{drive.JobTitle}'. Reason: Drive closed",
+                            f"Application status changed to Rejected for '{drive.JobTitle}'. Reason: Drive closed by recruiter",
                             "warning"
                         )
                         # Dispatch email notification in background
                         send_application_status_update_email_task.delay(app.id)
                     
-                    # Cancel all upcoming scheduled/pending interviews for this drive
+                    # Cancel all upcoming scheduled/pending/suspended interviews for this drive
                     app_ids = [app.id for app in unhired_apps]
                     if app_ids:
                         upcoming_interviews = Interview.query.filter(
                             Interview.application_id.in_(app_ids),
-                            Interview.status.in_(['scheduled', 'pending'])
+                            Interview.status.in_(['scheduled', 'pending', 'suspended'])
                         ).all()
                         for interview in upcoming_interviews:
                             interview.status = 'canceled'
-                            interview.remarks = 'Drive closed'
+                            interview.remarks = 'Drive closed by recruiter'
                             create_notification(
                                 interview.application.student.user_id,
                                 f"Your interview for '{drive.JobTitle}' has been canceled because the drive has closed.",
@@ -563,6 +564,7 @@ class CompanyApplicationsAPI(Resource):
         'offer_letter_status': fields.String, # Manually populated
         'rejection_reason': fields.String,
         'rejection_revoke_note': fields.String,
+        'previous_status': fields.String,
         'resume': fields.String(attribute=lambda x: x.resume if getattr(x, 'resume', None) else getattr(x.student, 'resume', None)),
         'student': fields.Nested({
             'user_id': fields.Integer,
@@ -740,8 +742,7 @@ class CompanyApplicationsAPI(Resource):
         if not application:
             return {"message": "Application not found"}, 404
 
-        if application.drive.Status == 'Application Closed':
-            return {"message": "This drive is already closed. Applications cannot be updated or screened."}, 400
+        # Removed check for Application Closed drive status to allow recruiters to process existing applications after the deadline passes.
 
         # Validate status transition
         valid_statuses = ['Pending', 'Shortlisted', 'Interviewing', 'Selected', 'Rejected', 'Hired']
@@ -1249,8 +1250,7 @@ class ViewApplication(Resource):
         if not application:
             return {"message": "Application not found"}, 404
 
-        if application.drive.Status == 'Application Closed':
-            return {"message": "This drive is already closed. Applications cannot be updated or screened."}, 400
+        # Removed check for Application Closed drive status to allow recruiters to process existing interviews/offers after the deadline passes.
 
         if data.get('action') == 'complete_interview':
             # Complete the current active/scheduled interview

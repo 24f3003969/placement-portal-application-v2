@@ -190,13 +190,16 @@ const GettedApplications = {
                                             <span class="small text-muted">Drive #{{app.drive.DriveID}}</span>
                                         </td>
                                         <td>
-                                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-0.5"><i class="bi bi-hourglass-split me-1"></i>Pending Review</span>
+                                            <span v-if="app.status === 'Suspended'" class="badge bg-warning text-dark border border-warning px-2 py-0.5"><i class="bi bi-pause-circle-fill me-1"></i>Suspended</span>
+                                            <span v-else class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-0.5"><i class="bi bi-hourglass-split me-1"></i>Pending Review</span>
                                             <small class="d-block text-muted mt-1" style="font-size: 0.7rem;">Applied: {{formatDateTime(app.application_date, false)}}</small>
                                         </td>
                                         <td class="text-center">
-                                            <!-- Alerts empty for pending -->
-                                            <button @click="shortlistApplication(app.id)" class="btn btn-success btn-sm px-2 py-0.5 mb-1 w-100 fw-bold shadow-sm" style="font-size: 0.75rem;"><i class="bi bi-check-circle me-1"></i> Shortlist</button>
-                                            <button @click="openRejectionModalDirect(app)" class="btn btn-outline-danger btn-sm px-2 py-0.5 w-100 fw-bold" style="font-size: 0.75rem;"><i class="bi bi-x-circle me-1"></i> Reject</button>
+                                            <span v-if="app.status === 'Suspended'" class="badge bg-warning text-dark px-2 py-1"><i class="bi bi-pause-circle-fill me-1"></i>Suspended</span>
+                                            <template v-else>
+                                                <button @click="shortlistApplication(app.id)" class="btn btn-success btn-sm px-2 py-0.5 mb-1 w-100 fw-bold shadow-sm" style="font-size: 0.75rem;"><i class="bi bi-check-circle me-1"></i> Shortlist</button>
+                                                <button @click="openRejectionModalDirect(app)" class="btn btn-outline-danger btn-sm px-2 py-0.5 w-100 fw-bold" style="font-size: 0.75rem;"><i class="bi bi-x-circle me-1"></i> Reject</button>
+                                            </template>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -273,6 +276,9 @@ const GettedApplications = {
                                             <span class="small text-muted">Drive #{{app.drive.DriveID}}</span>
                                         </td>
                                         <td>
+                                            <div v-if="app.status === 'Suspended'" class="mb-1">
+                                                <span class="badge bg-warning text-dark border border-warning px-2 py-0.5"><i class="bi bi-pause-circle-fill me-1"></i>Suspended</span>
+                                            </div>
                                             <!-- Explicit Pipeline Status -->
                                             <div v-if="app.interview_datetime === 'N/A' || app.interview_datetime === 'Not Scheduled' || !app.interview_datetime">
                                                 <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-0.5 mb-1">
@@ -297,14 +303,17 @@ const GettedApplications = {
                                             </div>
                                         </td>
                                         <td class="text-center align-middle" style="width: 200px;">
-                                            <!-- High Visibility Alert Badge -->
-                                            <div v-if="app.interview_datetime && app.interview_datetime !== 'N/A' && app.interview_datetime !== 'Not Scheduled' && isInterviewToday(app.interview_datetime)" class="text-danger small fw-bold mb-1 animate-pulse bg-danger-subtle rounded py-0.5 border border-danger-subtle">
-                                                <i class="bi bi-alarm-fill me-1"></i>Interview Today!
-                                            </div>
-        
-                                            <!-- Action Buttons -->
-                                            <button v-if="app.interview_datetime === 'N/A' || app.interview_datetime === 'Not Scheduled' || !app.interview_datetime" @click="openScheduleModalDirect(app)" class="btn btn-primary btn-sm px-2 py-0.5 w-100 fw-bold shadow-sm mb-1" style="font-size: 0.75rem;"><i class="bi bi-calendar-event me-1"></i>Schedule Slot</button>
-                                            <button v-else @click="manageInterviews(app.drive.DriveID, app.student.roll_no)" class="btn btn-dark btn-sm px-2 py-0.5 w-100 fw-bold shadow-sm mb-1" style="font-size: 0.75rem;"><i class="bi bi-camera-video me-1"></i>View Interview</button>
+                                            <span v-if="app.status === 'Suspended'" class="badge bg-warning text-dark px-2 py-1"><i class="bi bi-pause-circle-fill me-1"></i>Suspended</span>
+                                            <template v-else>
+                                                <!-- High Visibility Alert Badge -->
+                                                <div v-if="app.interview_datetime && app.interview_datetime !== 'N/A' && app.interview_datetime !== 'Not Scheduled' && isInterviewToday(app.interview_datetime)" class="text-danger small fw-bold mb-1 animate-pulse bg-danger-subtle rounded py-0.5 border border-danger-subtle">
+                                                    <i class="bi bi-alarm-fill me-1"></i>Interview Today!
+                                                </div>
+            
+                                                <!-- Action Buttons -->
+                                                <button v-if="app.interview_datetime === 'N/A' || app.interview_datetime === 'Not Scheduled' || !app.interview_datetime" @click="openScheduleModalDirect(app)" class="btn btn-primary btn-sm px-2 py-0.5 w-100 fw-bold shadow-sm mb-1" style="font-size: 0.75rem;"><i class="bi bi-calendar-event me-1"></i>Schedule Slot</button>
+                                                <button v-else @click="manageInterviews(app.drive.DriveID, app.student.roll_no)" class="btn btn-dark btn-sm px-2 py-0.5 w-100 fw-bold shadow-sm mb-1" style="font-size: 0.75rem;"><i class="bi bi-camera-video me-1"></i>View Interview</button>
+                                            </template>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -348,6 +357,9 @@ const GettedApplications = {
                                             <span class="small text-muted">Drive #{{app.drive.DriveID}}</span>
                                         </td>
                                         <td>
+                                            <div v-if="app.status === 'Suspended'" class="mb-1">
+                                                <span class="badge bg-warning text-dark border border-warning px-2 py-0.5"><i class="bi bi-pause-circle-fill me-1"></i>Suspended</span>
+                                            </div>
                                             <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0.5"><i class="bi bi-award me-1"></i>Selected (Offer Phase)</span>
                                             <small class="d-block text-muted mt-1" style="font-size: 0.7rem;">Selected on: {{ formatDateTime(app.selected_date || app.application_date, false) }}</small>
                                             <div v-if="app.offer_sent" class="mt-1.5 pt-1.5 border-top border-light-subtle">
@@ -360,15 +372,18 @@ const GettedApplications = {
                                             </div>
                                         </td>
                                         <td class="text-center align-middle" style="width: 200px;">
-                                            <div v-if="!app.offer_sent" class="text-warning-emphasis small fw-bold mb-1 animate-pulse bg-warning-subtle rounded py-0.5 border border-warning-subtle">
-                                                <i class="bi bi-envelope-exclamation-fill me-1"></i>Offer waiting to send!
-                                            </div>
-                                
-                                            <button v-if="!app.offer_sent" @click="openSendOfferModal(app)" class="btn btn-success btn-sm px-2 py-0.5 w-100 fw-bold shadow-sm" style="font-size: 0.75rem;"><i class="bi bi-send-plus me-1"></i>Generate Offer</button>
-                                            <div v-else>
-                                                <a :href="'/' + app.offer_letter" target="_blank" class="btn btn-sm btn-outline-success px-2 py-0.5 w-100 fw-bold mb-1" style="font-size: 0.75rem;"><i class="bi bi-filetype-pdf me-1"></i> View Sent Letter</a>
-                                                <button v-if="app.offer_status === 'Sent'" @click="openExtendOfferModal(app)" class="btn btn-sm btn-warning px-2 py-0.5 w-100 fw-bold mt-1 text-dark" style="font-size: 0.75rem;"><i class="bi bi-calendar-plus me-1"></i>Extend Deadline</button>
-                                            </div>
+                                            <span v-if="app.status === 'Suspended'" class="badge bg-warning text-dark px-2 py-1"><i class="bi bi-pause-circle-fill me-1"></i>Suspended</span>
+                                            <template v-else>
+                                                <div v-if="!app.offer_sent" class="text-warning-emphasis small fw-bold mb-1 animate-pulse bg-warning-subtle rounded py-0.5 border border-warning-subtle">
+                                                    <i class="bi bi-envelope-exclamation-fill me-1"></i>Offer waiting to send!
+                                                </div>
+                                    
+                                                <button v-if="!app.offer_sent" @click="openSendOfferModal(app)" class="btn btn-success btn-sm px-2 py-0.5 w-100 fw-bold shadow-sm" style="font-size: 0.75rem;"><i class="bi bi-send-plus me-1"></i>Generate Offer</button>
+                                                <div v-else>
+                                                    <a :href="'/' + app.offer_letter" target="_blank" class="btn btn-sm btn-outline-success px-2 py-0.5 w-100 fw-bold mb-1" style="font-size: 0.75rem;"><i class="bi bi-filetype-pdf me-1"></i> View Sent Letter</a>
+                                                    <button v-if="app.offer_status === 'Sent'" @click="openExtendOfferModal(app)" class="btn btn-sm btn-warning px-2 py-0.5 w-100 fw-bold mt-1 text-dark" style="font-size: 0.75rem;"><i class="bi bi-calendar-plus me-1"></i>Extend Deadline</button>
+                                                </div>
+                                            </template>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -448,9 +463,12 @@ const GettedApplications = {
                                         <td><span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-0.5"><i class="bi bi-x-octagon me-1"></i>Rejected</span></td>
                                         <td><div class="p-1 bg-light border rounded small">{{ app.rejection_reason || 'No failure log reason entered.' }}</div></td>
                                         <td class="text-center">
-                                            <span v-if="app.student_is_hired" class="badge bg-secondary text-white px-2 py-1" title="This candidate is already hired for another job."><i class="bi bi-lock-fill me-1"></i> Locked (Hired)</span>
-                                            <span v-else-if="app.rejection_reason === 'Offer rejected by student.' || app.offer_status === 'Rejected'" class="badge bg-secondary text-white px-2 py-1" title="This candidate officially declined the offer letter."><i class="bi bi-lock-fill me-1"></i> Locked (Declined)</span>
-                                            <button v-else @click="openRestoreAuditOverrideModal(app)" class="btn btn-outline-warning text-dark btn-sm py-0.5 fw-bold" style="font-size: 0.75rem;"><i class="bi bi-arrow-counterclockwise me-1"></i> Restore</button>
+                                            <span v-if="app.status === 'Suspended'" class="badge bg-warning text-dark px-2 py-1"><i class="bi bi-pause-circle-fill me-1"></i>Suspended</span>
+                                            <template v-else>
+                                                <span v-if="app.student_is_hired" class="badge bg-secondary text-white px-2 py-1" title="This candidate is already hired for another job."><i class="bi bi-lock-fill me-1"></i> Locked (Hired)</span>
+                                                <span v-else-if="app.rejection_reason === 'Offer rejected by student.' || app.offer_status === 'Rejected'" class="badge bg-secondary text-white px-2 py-1" title="This candidate officially declined the offer letter."><i class="bi bi-lock-fill me-1"></i> Locked (Declined)</span>
+                                                <button v-else @click="openRestoreAuditOverrideModal(app)" class="btn btn-outline-warning text-dark btn-sm py-0.5 fw-bold" style="font-size: 0.75rem;"><i class="bi bi-arrow-counterclockwise me-1"></i> Restore</button>
+                                            </template>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -784,34 +802,40 @@ const GettedApplications = {
             };
 
             for (const app of this.filteredApplications) {
-                    if (app.rejection_reason) {
-                        groups.rejectedApplications.push(app);
-                        continue;
-                    }
-
-                    switch (app.status) {
-                        case 'Applied':
-                        case 'Pending':
-                            groups.pendingApplications.push(app);
-                            break;
-                        case 'Shortlisted':
-                        case 'Interview': 
-                        case 'Interviewing':
-                            if (app.interview_datetime === 'N/A' || app.interview_datetime === 'Not Scheduled' || !app.interview_datetime) {
-                                groups.awaitingSchedule.push(app);
-                            } else {
-                                groups.interviewing.push(app);
-                            }
-                            break;
-                        case 'Selected':
-                            groups.selectedCandidates.push(app);
-                            break;
-                        case 'Hired':
-                            groups.hiredCandidates.push(app);
-                            break;
-                        // 'Rejected' case is now handled by rejection_reason
-                    }
+                if (app.rejection_reason) {
+                    groups.rejectedApplications.push(app);
+                    continue;
                 }
+
+                const statusToUse = app.status === 'Suspended' ? app.previous_status : app.status;
+
+                switch (statusToUse) {
+                    case 'Applied':
+                    case 'Pending':
+                        groups.pendingApplications.push(app);
+                        break;
+                    case 'Shortlisted':
+                    case 'Interview': 
+                    case 'Interviewing':
+                        if (app.interview_datetime === 'N/A' || app.interview_datetime === 'Not Scheduled' || !app.interview_datetime) {
+                            groups.awaitingSchedule.push(app);
+                        } else {
+                            groups.interviewing.push(app);
+                        }
+                        break;
+                    case 'Selected':
+                        groups.selectedCandidates.push(app);
+                        break;
+                    case 'Hired':
+                        groups.hiredCandidates.push(app);
+                        break;
+                    default:
+                        if (app.status === 'Suspended') {
+                            groups.pendingApplications.push(app);
+                        }
+                        break;
+                }
+            }
             return groups;
         },
         filteredShortlisted() {

@@ -465,11 +465,22 @@ const AdminManageDrives = {
             this.currentView = 'list';
             this.fetchDrives();
         },
-        handleViewNote(remark) {
-            if (remark) {
-                alert('Rejection Remark: ' + remark);
+        handleViewNote(drive) {
+            if (drive && typeof drive === 'object') {
+                const remark = drive.Remark;
+                if (remark) {
+                    const label = drive.Status === 'Suspended' ? 'Suspension Reason' : 'Rejection Remark';
+                    alert(label + ': ' + remark);
+                } else {
+                    alert('No remark/reason was provided.');
+                }
             } else {
-                alert('No rejection remark was provided.');
+                const remark = drive;
+                if (remark) {
+                    alert('Rejection Remark: ' + remark);
+                } else {
+                    alert('No rejection remark was provided.');
+                }
             }
         },
     },
