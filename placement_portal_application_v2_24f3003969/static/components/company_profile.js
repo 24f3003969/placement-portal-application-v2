@@ -103,7 +103,7 @@ const CompanyProfile = {
                                 <input type="text" v-model="profile.gstin" class="form-control" :disabled="!isAdminView">
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label small fw-bold">Secondary Email</label>
+                                <label class="form-label small fw-bold">Secondary Email</labe>
                                 <input type="email" v-model="profile.secondary_email" class="form-control" placeholder="Enter secondary email (optional)">
                             </div>
                             <div class="col-12">

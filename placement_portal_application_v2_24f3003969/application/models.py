@@ -180,8 +180,8 @@ class Application(db.Model):
     application_datetime = db.Column(db.DateTime, default=get_ist_now, nullable=False)
     status = db.Column(db.String(50), nullable=False,default=None)  
     selected_date = db.Column(db.Date, nullable=True)
-    rejection_reason = db.Column(db.Text, nullable=True)
-    rejection_revoke_note = db.Column(db.Text, nullable=True)
+    internal_rejection_remark = db.Column(db.Text, nullable=True)
+    Remark = db.Column(db.Text, nullable=True)
     resume = db.Column(db.Text, nullable=True)  
     updated_time=db.Column(db.DateTime,default=get_ist_now,nullable=False)
     available_immediately = db.Column(db.Boolean, default=True, nullable=False)
@@ -290,3 +290,13 @@ class Notification(db.Model):
     @staticmethod
     def should_notify(message):
         return True
+
+class PasswordResetToken(db.Model):
+    __tablename__ = 'password_reset_token'
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(255), unique=True, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=get_ist_now, nullable=False)
+    used = db.Column(db.Boolean, default=False, nullable=False)
+
+    user = db.relationship('User', backref=db.backref('reset_tokens', lazy='dynamic'))

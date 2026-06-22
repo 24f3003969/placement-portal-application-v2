@@ -36,7 +36,7 @@ const Home={
                         <p class="mb-0">Offers Released</p>
                     </div>
                     <div class="col-md-3 col-6 mt-3 mt-md-0">
-                        <h3 class="fw-bold">{{ stats.impact_stats.highest_package != null ? stats.impact_stats.highest_package : '...' }} LPA</h3>
+                        <h3 class="fw-bold">{{ stats.impact_stats.highest_package != 0 ? stats.impact_stats.highest_package : '...' }} LPA</h3>
                         <p class="mb-0">Highest Package</p>
                     </div>
                 </div>

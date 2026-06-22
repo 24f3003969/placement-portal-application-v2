@@ -124,7 +124,7 @@ class PlacementDriveAPI(Resource):
             query = PlacementDrives.query
 
             if is_student:
-                query = query.filter(PlacementDrives.Status.in_(['Active', 'Application Closed']))
+                query = query.filter(PlacementDrives.Status.in_(['Active', 'Application Closed', 'Closed']))
             elif is_company:
                 company = CompanyProfile.query.filter_by(user_id=current_user.id).first()
                 if not company:
@@ -210,13 +210,13 @@ class PlacementDriveAPI(Resource):
         drive = PlacementDrives.query.filter_by(DriveID=arguments['DriveID']).first()
         if not drive:
             return {"message": "Drive not found"}, 404
-        if drive.Status == 'Application Closed':
+        if drive.Status == 'Closed':
             return {"message": "Closed drives are permanently locked and cannot be modified"}, 400
         status = arguments['Status']
         if status in ['Approved', 'Active']:
             drive.Status = 'Active'
         elif status == 'Closed':
-            drive.Status = 'Application Closed'
+            drive.Status = 'Closed'
         else:
             drive.Status = status
         drive.Remark = arguments.get('remarks')
@@ -227,7 +227,7 @@ class PlacementDriveAPI(Resource):
         db.session.refresh(drive)
         
         from application.tasks import send_drive_status_update_email_task
-        if arguments['Status'] in ['Approved', 'Active', 'Rejected']:
+        if arguments['Status'] in ['Approved', 'Active', 'Rejected', 'Closed', 'Application Closed']:
             mapped_status = 'Active' if arguments['Status'] in ['Approved', 'Active'] else arguments['Status']
             send_drive_status_update_email_task.apply_async(args=[drive.DriveID, mapped_status, drive.Remark], countdown=10)
         cache.clear()
@@ -296,63 +296,95 @@ company_api.add_resource(DriveTemplateAPI, '/drive_templates', '/drive_templates
 
 
 class DriveApplication(Resource):
+    @auth_required()
+    @roles_required('comp')
     def put(self, drive_id):
         try:
             drive = PlacementDrives.query.get(drive_id)
-            if drive:
-                if drive.Status == 'Active':
-                    drive.Status = 'Application Closed'
+            if not drive:
+                return {"message": f"No drive with id: {drive_id} exist"}, 404
+
+            # Ensure the drive belongs to the logged-in company
+            company = CompanyProfile.query.filter_by(user_id=current_user.id).first()
+            if not company or drive.CompanyID != company.id:
+                return {"message": "Unauthorized"}, 403
+
+            data = request.get_json(silent=True) or {}
+            action = data.get('action') or request.args.get('action') or 'close_drive'
+
+            if action == 'close_applications':
+                if drive.Status != 'Active':
+                    return {"message": "Only active drives can have their applications closed."}, 400
+                
+                drive.Status = 'Application Closed'
+                db.session.commit()
+                cache.clear()
+                
+                # Notify the company
+                from application.tasks import send_drive_status_update_email_task
+                send_drive_status_update_email_task.delay(drive.DriveID, 'Application Closed', 'Applications manually closed by recruiter.')
+                
+                return {"message": "Applications closed successfully"}, 200
+
+            elif action == 'close_drive':
+                if drive.Status not in ['Active', 'Application Closed', 'Suspended']:
+                    return {"message": "Drive is not in a status that can be closed."}, 400
+                
+                drive.Status = 'Closed'
+                
+                # Get all applications for this drive that are not in 'Selected' or 'Hired' state
+                unhired_apps = Application.query.filter(
+                    Application.DriveID == drive_id,
+                    Application.status.notin_(['Selected', 'Hired'])
+                ).all()
+                
+                from application.tasks import send_application_status_update_email_task
+                
+                for app in unhired_apps:
+                    if app.status != 'Rejected':
+                        if not app.previous_status:
+                            app.previous_status = app.status
+                    app.status = 'Rejected'
+                    app.internal_rejection_remark = 'Drive closed by recruiter'
                     
-                    # Get all applications for this drive that are not in 'Selected' or 'Hired' state
-                    unhired_apps = Application.query.filter(
-                        Application.DriveID == drive_id,
-                        Application.status.notin_(['Selected', 'Hired'])
+                    # Create dynamic in-app notification
+                    create_notification(
+                        app.student.user_id,
+                        f"Application status changed to Rejected for '{drive.JobTitle}'. Reason: Drive closed by recruiter",
+                        "warning"
+                    )
+                    # Dispatch email notification in background
+                    send_application_status_update_email_task.delay(app.id)
+                
+                # Cancel all upcoming scheduled/pending/suspended interviews for this drive
+                app_ids = [app.id for app in unhired_apps]
+                if app_ids:
+                    upcoming_interviews = Interview.query.filter(
+                        Interview.application_id.in_(app_ids),
+                        Interview.status.in_(['scheduled', 'pending', 'suspended'])
                     ).all()
-                    
-                    from application.tasks import send_application_status_update_email_task
-                    
-                    for app in unhired_apps:
-                        if app.status != 'Rejected':
-                            if not app.previous_status:
-                                app.previous_status = app.status
-                        app.status = 'Rejected'
-                        app.rejection_reason = 'Drive closed by recruiter'
-                        
-                        # Create dynamic in-app notification
+                    for interview in upcoming_interviews:
+                        interview.status = 'canceled'
+                        interview.remarks = 'Drive closed by recruiter'
                         create_notification(
-                            app.student.user_id,
-                            f"Application status changed to Rejected for '{drive.JobTitle}'. Reason: Drive closed by recruiter",
+                            interview.application.student.user_id,
+                            f"Your interview for '{drive.JobTitle}' has been canceled because the drive has closed.",
                             "warning"
                         )
-                        # Dispatch email notification in background
-                        send_application_status_update_email_task.delay(app.id)
-                    
-                    # Cancel all upcoming scheduled/pending/suspended interviews for this drive
-                    app_ids = [app.id for app in unhired_apps]
-                    if app_ids:
-                        upcoming_interviews = Interview.query.filter(
-                            Interview.application_id.in_(app_ids),
-                            Interview.status.in_(['scheduled', 'pending', 'suspended'])
-                        ).all()
-                        for interview in upcoming_interviews:
-                            interview.status = 'canceled'
-                            interview.remarks = 'Drive closed by recruiter'
-                            create_notification(
-                                interview.application.student.user_id,
-                                f"Your interview for '{drive.JobTitle}' has been canceled because the drive has closed.",
-                                "warning"
-                            )
-                        
-                    db.session.commit()
-                    cache.clear()
-                    return {"message": "Drive Closed successfully"}, 200
-                else:
-                    return {"message": "Drive is not active or approved, or is already closed."}, 400
+                
+                db.session.commit()
+                cache.clear()
+
+                from application.tasks import send_drive_status_update_email_task
+                send_drive_status_update_email_task.delay(drive.DriveID, 'Closed', 'Drive closed by recruiter.')
+
+                return {"message": "Drive Closed successfully"}, 200
             else:
-                return {"message": f"No drive with id: {drive_id} exist"}, 404
+                return {"message": f"Invalid action: {action}"}, 400
         except Exception as e:
             print(f"Error in changing status: {e}")
-            return {"message": "An error occured while changing status"}, 500
+            db.session.rollback()
+            return {"message": "An error occurred while changing status"}, 500
 
 company_api.add_resource(DriveApplication, '/drive_application/<int:drive_id>')
 
@@ -562,8 +594,8 @@ class CompanyApplicationsAPI(Resource):
         'offer_letter': fields.String(attribute=lambda x: x.placement.offer_letter if x.placement else None),
         'offer_message': fields.String(attribute=lambda x: x.placement.message if x.placement else None),
         'offer_letter_status': fields.String, # Manually populated
-        'rejection_reason': fields.String,
-        'rejection_revoke_note': fields.String,
+        'rejection_reason': fields.String(attribute='internal_rejection_remark'),
+        'remark': fields.String(attribute='Remark'),
         'previous_status': fields.String,
         'resume': fields.String(attribute=lambda x: x.resume if getattr(x, 'resume', None) else getattr(x.student, 'resume', None)),
         'student': fields.Nested({
@@ -588,6 +620,7 @@ class CompanyApplicationsAPI(Resource):
             'logo_image': fields.String,   # Uses @property in PlacementDrives
             'noRounds': fields.Integer,
             'InterviewRounds': fields.Raw,
+            'Status': fields.String,
         }),
         # Fields for the latest interview, populated manually below
         'interview_datetime': fields.String,
@@ -742,6 +775,9 @@ class CompanyApplicationsAPI(Resource):
         if not application:
             return {"message": "Application not found"}, 404
 
+        if application.drive.Status == 'Closed':
+            return {"message": "Drive is finally closed and applications cannot be modified."}, 400
+
         # Removed check for Application Closed drive status to allow recruiters to process existing applications after the deadline passes.
 
         # Validate status transition
@@ -866,7 +902,7 @@ class CompanyDashboardSummaryAPI(Resource):
         # --- Action Center Calculations (Fixed to match execution states) ---
         now_dt = get_ist_now()
         # 1. Pending Screenings: Count applications waiting in 'Pending' state
-        pending_screenings_count = sum(1 for a in all_applications if a.status == 'Pending' and not a.rejection_reason)
+        pending_screenings_count = sum(1 for a in all_applications if a.status == 'Pending' and not a.internal_rejection_remark)
         
         # 2. Feedback Due: Scheduled interview slot time has passed, but no result has been logged yet
         feedback_due_count = sum(
@@ -875,7 +911,7 @@ class CompanyDashboardSummaryAPI(Resource):
         )
         
         # 3. Unscheduled: Shortlisted application IDs that do not exist at all in the Interview tracking log
-        shortlisted_app_ids = {a.id for a in all_applications if a.status in ['Shortlisted', 'Interviewing', 'Interview'] and not a.rejection_reason}
+        shortlisted_app_ids = {a.id for a in all_applications if a.status in ['Shortlisted', 'Interviewing'] and not a.internal_rejection_remark}
         app_ids_with_any_interviews = {i.application_id for i in all_interviews}
         unscheduled_count = len(shortlisted_app_ids - app_ids_with_any_interviews)
 
@@ -935,7 +971,7 @@ class CompanyDashboardSummaryAPI(Resource):
         insights = { "time_to_hire_days": avg_time_to_hire, "application_velocity": velocity_list, "skill_cloud": skill_cloud }
 
         # --- Notifications (Enhanced) ---
-        recent_apps = sorted([app for app in all_applications if app.status == 'Pending' and not app.rejection_reason], key=lambda x: x.application_datetime or datetime.min, reverse=True)[:5]
+        recent_apps = sorted([app for app in all_applications if app.status == 'Pending' and not app.internal_rejection_remark], key=lambda x: x.application_datetime or datetime.min, reverse=True)[:5]
         notifications = [{"id": app.id, "student_name": app.student.name, "job_title": app.drive.JobTitle, "timestamp": app.application_datetime.isoformat() if app.application_datetime else get_ist_now().isoformat(), "type": "new_application", "student_id": app.student.user_id} for app in recent_apps]
 
         return {
@@ -1030,7 +1066,7 @@ class CompanyInterviewsAPI(Resource):
             awaiting_list = []
             active_apps = Application.query.filter(
                 Application.DriveID == drive.DriveID,
-                Application.status.in_(['Shortlisted', 'Interviewing', 'Interview'])
+                Application.status.in_(['Shortlisted', 'Interviewing'])
             ).options(db.joinedload(Application.student)).all()
 
             for app in active_apps:
@@ -1153,7 +1189,7 @@ class DriveViewing(Resource):
                 "hired_students": []
             }
 
-        successful_screenings = sum(1 for app in applications if app.status in ['Shortlisted', 'Selected', 'Hired'])
+        successful_screenings = sum(1 for app in applications if app.status in ['Shortlisted', 'Interviewing', 'Selected', 'Hired'])
         pass_rate = round((successful_screenings / total_applicants) * 100, 2) if total_applicants > 0 else 0
 
         # 2. Average CGPA (All)
@@ -1161,7 +1197,7 @@ class DriveViewing(Resource):
         avg_cgpa_all = round(total_cgpa_all / total_applicants, 2) if total_applicants > 0 else 0
 
         # 3. Average CGPA (Shortlisted)
-        shortlisted_apps = [app for app in applications if app.status == 'Shortlisted']
+        shortlisted_apps = [app for app in applications if app.status in ['Shortlisted', 'Interviewing', 'Selected', 'Hired']]
         if shortlisted_apps:
             total_cgpa_shortlisted = sum(float(app.student.cgpa) for app in shortlisted_apps if app.student.cgpa is not None)
             avg_cgpa_shortlisted = round(total_cgpa_shortlisted / len(shortlisted_apps), 2)
@@ -1195,14 +1231,44 @@ class DriveViewing(Resource):
             percentage = round((count / total_applicants) * 100, 2)
             department_distribution.append({"department": dept, "percentage": percentage})
 
+        status_counts = Counter(app.status for app in applications)
+        status_distribution = dict(status_counts)
+
+        all_applicants_data = []
+        for app in applications:
+            latest_interview_round = "None"
+            latest_interview_status = "N/A"
+            if app.interviews:
+                sorted_interviews = sorted(app.interviews, key=lambda x: x.round_no)
+                if sorted_interviews:
+                    latest_round = sorted_interviews[-1]
+                    latest_interview_round = f"Round {latest_round.round_no}: {latest_round.round_name}"
+                    latest_interview_status = latest_round.status
+
+            all_applicants_data.append({
+                "id": app.id,
+                "user_id": app.student.user_id,
+                "name": app.student.name,
+                "roll_no": app.student.roll_no,
+                "cgpa": app.student.cgpa,
+                "department": app.student.department,
+                "status": app.status,
+                "application_date": app.application_datetime.isoformat() if app.application_datetime else None,
+                "resume": app.resume,
+                "latest_interview_round": latest_interview_round,
+                "latest_interview_status": latest_interview_status
+            })
+
         return {
             "pass_rate": pass_rate,
             "avg_cgpa_all": avg_cgpa_all,
             "avg_cgpa_shortlisted": avg_cgpa_shortlisted,
             "top_skills": top_skills_data,
             "least_common_skill": least_common_skill,
-            "department_distribution": department_distribution,           # NEW: Sending all applicants to the frontend
-            "hired_students": hired_students_data
+            "department_distribution": department_distribution,
+            "hired_students": hired_students_data,
+            "status_distribution": status_distribution,
+            "all_applicants": all_applicants_data
         }, 200
 
 company_api.add_resource(DriveViewing, '/drive_viewing/<int:drive_id>')
@@ -1250,6 +1316,9 @@ class ViewApplication(Resource):
         if not application:
             return {"message": "Application not found"}, 404
 
+        if application.drive.Status == 'Closed':
+            return {"message": "Drive is finally closed and interviews/offers cannot be modified."}, 400
+
         # Removed check for Application Closed drive status to allow recruiters to process existing interviews/offers after the deadline passes.
 
         if data.get('action') == 'complete_interview':
@@ -1271,8 +1340,8 @@ class ViewApplication(Resource):
                 if application.status != 'Rejected':
                     application.previous_status = application.status
                 application.status = 'Rejected'
-                application.rejection_reason = data.get('remarks') or "Interview round failed."
-                application.rejection_revoke_note = data.get('student_facing_remarks')
+                application.internal_rejection_remark = data.get('remarks') or "Interview round failed."
+                application.Remark = data.get('student_facing_remarks')
                 
                 # Send rejection notification/email
                 create_notification(application.student.user_id, f"Your application for '{application.drive.JobTitle}' has been rejected.", "warning")
@@ -1305,16 +1374,17 @@ class ViewApplication(Resource):
             if application.status != 'Rejected':
                 application.previous_status = application.status
             application.status = 'Rejected'
-            application.rejection_reason = args.get('rejection_reason') or 'No reason provided.'
+            application.internal_rejection_remark = args.get('rejection_reason') or 'No reason provided.'
+            application.Remark = args.get('note_for_student')
             application.updated_time = get_ist_now()
             
             latest_interview = Interview.query.filter_by(application_id=application_id).order_by(Interview.round_no.desc()).first()
             if latest_interview and latest_interview.status == 'scheduled':
                 latest_interview.status = 'completed'
                 latest_interview.result = 'failed'
-                latest_interview.remarks = application.rejection_reason
+                latest_interview.remarks = application.internal_rejection_remark
                 latest_interview.student_facing_remarks = args.get('note_for_student')
-            create_notification(application.student.user_id, f"Application status changed to Rejected for '{application.drive.JobTitle}'. Reason: {application.rejection_reason}", "warning")
+            create_notification(application.student.user_id, f"Application status changed to Rejected for '{application.drive.JobTitle}'. Reason: {application.internal_rejection_remark}", "warning")
             
             try:
                 from application.tasks import send_application_status_update_email_task
@@ -1338,12 +1408,12 @@ class ViewApplication(Resource):
                 return {"message": "Cannot restore application: The student's account is currently suspended or deactivated."}, 400
 
             # Check if the rejection was due to student declining the offer
-            if (application.rejection_reason == 'Offer rejected by student.' or 
+            if (application.internal_rejection_remark == 'Offer rejected by student.' or 
                 (application.placement and application.placement.offer_status == 'Rejected')):
                 return {"message": "Cannot restore application: The offer was officially declined by the student."}, 400
 
-            application.rejection_reason = None
-            application.rejection_revoke_note = args.get('note_for_student')
+            application.internal_rejection_remark = None
+            application.Remark = args.get('note_for_student')
             
             if application.previous_status:
                 application.status = application.previous_status
@@ -1387,7 +1457,7 @@ class ViewApplication(Resource):
                 msg = f"Application status changed to Shortlisted for '{application.drive.JobTitle}'."
                 notif_type = "info"
             elif new_status == 'Rejected':
-                msg = f"Application status changed to Rejected for '{application.drive.JobTitle}'. Reason: {application.rejection_reason or 'No reason provided.'}"
+                msg = f"Application status changed to Rejected for '{application.drive.JobTitle}'. Reason: {application.internal_rejection_remark or 'No reason provided.'}"
                 notif_type = "warning"
             else:
                 msg = f"Your application status for '{application.drive.JobTitle}' has been updated to '{new_status}'."
@@ -1406,6 +1476,9 @@ class ViewApplication(Resource):
         application = Application.query.get(application_id)
         if not application:
             return {"message": "Application not found"}, 404
+
+        if application.drive.Status == 'Closed':
+            return {"message": "Drive is finally closed and interviews cannot be scheduled."}, 400
         
         standard_dt = args.get('datetime')
         if standard_dt:
@@ -1520,13 +1593,75 @@ class SendOfferAPI(Resource):
             # Trigger the background task
             from application.tasks import generate_offer_letter_task
             task = generate_offer_letter_task.delay(application_id, offer_data)
-            cache.clear() # Clear cache immediately on task dispatch
             return {"message": "Offer letter generation has started.", "task_id": task.id}, 202
         except Exception as e:
             print(f"Error dispatching offer letter task: {e}")
             return {"message": "An error occurred while starting the offer letter generation."}, 500
 
 company_api.add_resource(SendOfferAPI, '/application/<int:application_id>/send_offer')
+
+
+class BulkSendOfferAPI(Resource):
+    @auth_required('token')
+    @roles_required('comp')
+    def post(self):
+        data = request.json or {}
+        app_ids = data.get('application_ids', [])
+        
+        if not app_ids:
+            return {"message": "No application IDs provided."}, 400
+            
+        # Validate dates
+        offer_expiry_date_str = data.get('offer_expiry_date')
+        joining_date_str = data.get('joining_date')
+        message = data.get('message', '')
+        
+        if not offer_expiry_date_str or not joining_date_str:
+            return {"message": "Offer expiry date and joining date are required."}, 400
+            
+        try:
+            try:
+                offer_expiry = datetime.strptime(offer_expiry_date_str, '%Y-%m-%d').date()
+                joining_date = datetime.strptime(joining_date_str, '%Y-%m-%d').date()
+            except (ValueError, TypeError):
+                return {"message": "Invalid date format. Use YYYY-MM-DD"}, 400
+            
+            today = get_ist_date()
+            if offer_expiry <= today:
+                return {"message": "Offer expiry date must be in the future."}, 400
+            if joining_date <= today:
+                return {"message": "Joining date must be in the future."}, 400
+
+            # Validate applications belong to this company and are in 'Selected' status
+            valid_apps = []
+            for app_id in app_ids:
+                application = Application.query.get(app_id)
+                if not application:
+                    continue
+                if application.drive.company.user_id != current_user.id:
+                    return {"message": f"Unauthorized access to application {app_id}."}, 403
+                if application.status != 'Selected':
+                    return {"message": f"Application {app_id} is not in 'Selected' status."}, 400
+                valid_apps.append(app_id)
+                
+            if not valid_apps:
+                return {"message": "No valid selected applications found to send offers to."}, 400
+
+            offer_data = {
+                'expiry_date': offer_expiry_date_str,
+                'joining_date': joining_date_str,
+                'message': message
+            }
+            
+            from application.tasks import generate_bulk_offers_task
+            task = generate_bulk_offers_task.delay(valid_apps, offer_data)
+            cache.clear()
+            return {"message": "Bulk offer letter generation has started.", "task_id": task.id}, 202
+        except Exception as e:
+            print(f"Error dispatching bulk offer letters task: {e}")
+            return {"message": "An error occurred while starting the bulk offer letter generation."}, 500
+
+company_api.add_resource(BulkSendOfferAPI, '/applications/bulk_send_offers')
 
 
 class PostedDriveStats(Resource):
@@ -1634,8 +1769,8 @@ class CloseRoundAPI(Resource):
             if app.status != 'Rejected':
                 app.previous_status = app.status
             app.status = 'Rejected'
-            app.rejection_reason = remarks
-            app.rejection_revoke_note = student_facing_remarks
+            app.internal_rejection_remark = remarks
+            app.Remark = student_facing_remarks
             app.updated_time = get_ist_now()
             
             create_notification(app.student.user_id, f"Your application for '{drive.JobTitle}' has been rejected because the position was closed.", "warning")
@@ -1649,8 +1784,8 @@ class CloseRoundAPI(Resource):
         # 2. Reject all other applications in pipeline that are currently in/awaiting this round
         pipeline_apps = Application.query.filter(
             Application.DriveID == drive_id,
-            Application.status.in_(['Shortlisted', 'Interviewing', 'Interview']),
-            Application.rejection_reason.is_(None)
+            Application.status.in_(['Shortlisted', 'Interviewing']),
+            Application.internal_rejection_remark.is_(None)
         ).all()
         
         for app in pipeline_apps:
@@ -1665,8 +1800,8 @@ class CloseRoundAPI(Resource):
                 if app.status != 'Rejected':
                     app.previous_status = app.status
                 app.status = 'Rejected'
-                app.rejection_reason = remarks
-                app.rejection_revoke_note = student_facing_remarks
+                app.internal_rejection_remark = remarks
+                app.Remark = student_facing_remarks
                 app.updated_time = get_ist_now()
                 create_notification(app.student.user_id, f"Your application for '{drive.JobTitle}' has been rejected because the position was closed.", "warning")
                 count += 1
@@ -1696,8 +1831,8 @@ class RejectIneligibleApplicationsAPI(Resource):
             
         active_apps = Application.query.filter(
             Application.DriveID == drive_id,
-            Application.status.in_(['Pending', 'Shortlisted', 'Interviewing', 'Interview']),
-            Application.rejection_reason.is_(None)
+            Application.status.in_(['Pending', 'Shortlisted', 'Interviewing']),
+            Application.internal_rejection_remark.is_(None)
         ).all()
         
         count = 0
@@ -1708,7 +1843,7 @@ class RejectIneligibleApplicationsAPI(Resource):
                 if app.status != 'Rejected':
                     app.previous_status = app.status
                 app.status = 'Rejected'
-                app.rejection_reason = f"Eligibility lost due to profile update (Mismatch: {', '.join(issues)})"
+                app.internal_rejection_remark = f"Eligibility lost due to profile update (Mismatch: {', '.join(issues)})"
                 app.updated_time = get_ist_now()
                 
                 create_notification(
@@ -1724,7 +1859,7 @@ class RejectIneligibleApplicationsAPI(Resource):
                 ).all()
                 for interview in upcoming_interviews:
                     interview.status = 'canceled'
-                    interview.remarks = f"Application rejected automatically. Reason: {app.rejection_reason}"
+                    interview.remarks = f"Application rejected automatically. Reason: {app.internal_rejection_remark}"
                 
                 try:
                     send_application_status_update_email_task.delay(app.id)

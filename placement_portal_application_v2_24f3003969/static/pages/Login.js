@@ -27,7 +27,10 @@ const Login={
                         <input v-model="email" type="email" class="form-control" placeholder="hello@example.com" required/>
                     </div>
                     <div class="form-group mb-4">
-                        <label for="password" class="form-label">Password</label>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label for="password" class="form-label mb-0">Password</label>
+                            <a href="#" @click.prevent="forgotPassword" class="text-decoration-none small">Forgot Password?</a>
+                        </div>
                         <input v-model="password" type="password" class="form-control" placeholder="Must be atleast 6 characters" required/>
                     </div>
                     <button class="btn btn-primary w-100" type="submit" :disabled="isLoading">
@@ -105,6 +108,44 @@ const Login={
         }
     },
     methods:{
+        async forgotPassword() {
+            this.errorMessage = '';
+            this.successMessage = '';
+            
+            if (!this.email) {
+                this.errorMessage = 'Please enter your email address in the Email field first.';
+                return;
+            }
+            
+            const confirmed = window.confirm(`Are you sure you want to reset the password for ${this.email}?`);
+            if (!confirmed) {
+                return;
+            }
+            
+            this.isLoading = true;
+            try {
+                const url = window.location.origin;
+                const res = await fetch(url + '/api/forgot_password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email: this.email }),
+                });
+                
+                const data = await res.json();
+                if (res.ok) {
+                    this.successMessage = data.message;
+                } else {
+                    this.errorMessage = data.message || 'Failed to send password reset request.';
+                }
+            } catch (error) {
+                console.error('Forgot password error:', error);
+                this.errorMessage = 'An error occurred. Please try again.';
+            } finally {
+                this.isLoading = false;
+            }
+        },
         async submitInfo(){
             // Reset messages
             this.errorMessage = '';

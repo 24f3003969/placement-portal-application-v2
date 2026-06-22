@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Offer Letter - {{ company.company_name }}</title>
+    <title>Offer Letter - Google</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,600;1,400&display=swap');
         
@@ -155,67 +155,69 @@
 <body>
     <div class="header">
         <div class="company-info">
-            <h1 class="company-name">{{ company.company_name }}</h1>
-            <p class="company-address">{{ company.address }}</p>
+            <h1 class="company-name">Google</h1>
+            <p class="company-address">agra</p>
         </div>
         <div class="document-title">
             <h2>Letter of Offer</h2>
-            <p>Date: {{ generation_date }}</p>
+            <p>Date: 21-Jun-2026</p>
         </div>
     </div>
 
     <div class="meta-section">
         <div class="recipient-info">
-            <strong>{{ student.name }}</strong><br>
-            Roll No: {{ student.roll_no }}<br>
-            Department of {{ student.department }}
+            <strong>Prachi Chaudhary</strong><br>
+            Roll No: 24f3005677<br>
+            Department of Computer Science
         </div>
     </div>
 
     <div class="subject-line">
-        Subject: Offer of Employment for the position of {{ drive.JobTitle }}
+        Subject: Offer of Employment for the position of Full Stack Developer
     </div>
 
     <div class="content">
-        <p>Dear {{ student.name }},</p>
+        <p>Dear Prachi Chaudhary,</p>
 
         <p>
             Following our recent campus recruitment process, we are delighted to offer you employment for the position of 
-            <span class="highlight">{{ drive.JobTitle }}</span> with <span class="highlight">{{ company.company_name }}</span>. 
-            This is a full-time <span class="highlight">{{ drive.Type }}</span> engagement based at our office location in <span class="highlight">{{ drive.Location }}</span>.
+            <span class="highlight">Full Stack Developer</span> with <span class="highlight">Google</span>. 
+            This is a full-time <span class="highlight">Job</span> engagement based at our office location in <span class="highlight">Banglore</span>.
         </p>
         
         <p>
             Your compensation package has been structured at <span class="highlight">
-            {% if drive.Type == 'Job' %}
-                {{ drive.Salary }} LPA
-            {% else %}
-                ₹{{ drive.Salary }} per month
-            {% endif %}
+            
+                12 LPA
+            
             </span>, subject to standard deductions.
         </p>
 
         <p>
-            Your anticipated commencement date is scheduled on or before <span class="highlight">{{ joining_date }}</span>. 
+            Your anticipated commencement date is scheduled on or before <span class="highlight">23-Jun-2026</span>. 
             On your first day, please report to the HR Department at 9:00 AM to complete onboarding formalities.
         </p>
 
-        {% if message %}
-        <div class="employer-message">
-            {{ message }}
-        </div>
-        {% endif %}
+        
 
         <p>
-            This offer is subject to satisfactory verification of your credentials and eligibility criteria. Please confirm your acceptance of this offer by <span class="highlight">{{ expiry_date }}</span>, after which this offer shall automatically expire.
+            This offer is subject to satisfactory verification of your credentials and eligibility criteria. Please confirm your acceptance of this offer by <span class="highlight">24-Jun-2026</span>, after which this offer shall automatically expire.
         </p>
 
         <p>We are excited about the prospect of you joining us and look forward to your valuable contribution to our collective growth.</p>
     </div>
 
-    <div>
-        <strong>HR Manager</strong><br>
-        {{ company.company_name }}
+    <div class="signature-section">
+        <div class="signature-block">
+            <div class="signature-line"></div>
+            <strong>HR Manager</strong><br>
+            Google
+        </div>
+        <div class="signature-block" style="text-align: right;">
+            <div class="signature-line"></div>
+            <strong>Candidate Signature</strong><br>
+            Prachi Chaudhary
+        </div>
     </div>
 
     <div class="footer">

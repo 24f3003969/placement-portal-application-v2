@@ -69,7 +69,7 @@ def generate_student_report_task(self, student_id):
         interviews_count = sum(len(app.interviews) for app in applications)
 
         # --- Insights Calculation ---
-        status_counts = Counter('Rejected' if app.rejection_reason else app.status for app in applications)
+        status_counts = Counter(app.status for app in applications)
         total_applications = len(applications)
         insights = {
             "Total Applications": total_applications,
@@ -116,7 +116,7 @@ def generate_student_report_task(self, student_id):
             writer.writerow(['--- APPLICATION HISTORY ---'])
             app_header = [
                 'Sr. No.', 'Company Name', 'Drive Job Title', 'Type', 'Applied On', 
-                'Current Status', 'Compensation', 'Rejection Reason', 'Note for Student', 'Last Updated'
+                'Current Status', 'Compensation', 'Remarks', 'Last Updated'
             ]
             writer.writerow(app_header)
 
@@ -132,13 +132,12 @@ def generate_student_report_task(self, student_id):
                             compensation = f"{app.drive.Salary}/month"
 
                     # Handle Null values gracefully
-                    rejection_reason = app.rejection_reason if app.rejection_reason else 'N/A'
-                    rejection_note = app.rejection_revoke_note if app.rejection_revoke_note else 'N/A'
+                    student_remark = app.Remark if app.Remark else 'N/A'
 
                     row = [
                         i, app.drive.company_name, app.drive.JobTitle, app.drive.Type,
-                        formatDateTime(app.application_datetime, include_time=False), 'Rejected' if app.rejection_reason else app.status,
-                        compensation, rejection_reason, rejection_note, formatDateTime(app.updated_time, include_time=True)
+                        formatDateTime(app.application_datetime, include_time=False), app.status,
+                        compensation, student_remark, formatDateTime(app.updated_time, include_time=True)
                     ]
                     writer.writerow(row)
                     
@@ -151,8 +150,7 @@ def generate_student_report_task(self, student_id):
             writer.writerow(['--- DETAILED INTERVIEW HISTORY ---'])
             interview_header = [
                 'Sr. No.', 'Company Name', 'Job Title', 'Round No.', 'Round Name', 
-                'Date & Time', 'Location / Link', 'Status', 'Result', 
-                'Internal Remarks', 'Feedback for Student'
+                'Date & Time', 'Location / Link', 'Status', 'Result', 'Feedback for Student'
             ]
             writer.writerow(interview_header)
             
@@ -173,7 +171,6 @@ def generate_student_report_task(self, student_id):
                         interview.location_or_link or 'N/A',
                         interview.status,
                         interview.result or 'N/A',
-                        interview.remarks or 'N/A',
                         interview.student_facing_remarks or 'N/A'
                     ]
                     interview_rows.append(row)
@@ -193,110 +190,129 @@ def generate_student_report_task(self, student_id):
         raise e
 
 
+def generate_offer_letter_internal(application_id, offer_data):
+    application = Application.query.get(application_id)
+    if not application:
+        raise ValueError("Application not found")
+    if not offer_data:
+        raise ValueError("Offer data is required to generate the offer letter")
+    student = application.student
+    drive = application.drive
+    company = drive.company
+
+    # Prepare data for the template
+    template_data = {
+        "student": student,
+        "drive": drive,
+        "company": company,
+        "joining_date": formatDateTime(offer_data['joining_date'], include_time=False),
+        "expiry_date": formatDateTime(offer_data['expiry_date'], include_time=False),
+        "message": offer_data.get('message'),
+        "generation_date": formatDateTime(get_ist_now(), include_time=False)
+    }
+
+    # Render the HTML offer letter
+    template_path = os.path.join(current_app.root_path, 'templates', 'offer_letter_template.html')
+    with open(template_path) as file:
+        template = Template(file.read())
+    html_content = template.render(template_data)
+
+    # Save the generated HTML file
+    filename = f"offer_{application.id}_{student.roll_no}_{uuid.uuid4().hex[:8]}.html"
+    reports_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'offer_letters')
+    os.makedirs(reports_dir, exist_ok=True)
+    save_path = os.path.join(reports_dir, filename)
+    
+    with open(save_path, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+
+    # Find or create a Placement record
+    placement = Placement.query.filter_by(application_id=application.id).first()
+    if not placement:
+        placement = Placement(
+            application_id=application.id,
+        )
+        db.session.add(placement)
+
+    # Update the placement record with offer details
+    web_accessible_path = os.path.join('static/uploads/offer_letters', filename).replace('\\', '/')
+    placement.offer_letter = web_accessible_path
+    placement.offer_expiry_date = datetime.strptime(offer_data['expiry_date'], '%Y-%m-%d').date()
+    placement.joining_date = datetime.strptime(offer_data['joining_date'], '%Y-%m-%d').date()
+    placement.message = offer_data.get('message')
+    placement.offer_sent = True
+    placement.offer_sent_date = get_ist_now()
+    placement.offer_status = 'Sent'
+
+    # Create a notification for the student
+    from application.models import Notification
+    msg = f"Congratulations! You have received an offer letter from '{company.company_name}' for '{drive.JobTitle}'."
+    if Notification.should_notify(msg):
+        new_notif = Notification(
+            user_id=student.user_id,
+            message=msg,
+            type="success"
+        )
+        db.session.add(new_notif)
+
+    db.session.commit()
+
+    # Send the selection update & offer letter email with expiry date and attachment
+    subject = f"Selected & Offer Letter for '{drive.JobTitle}'"
+    expiry_date_str = formatDateTime(offer_data['expiry_date'], include_time=False)
+    joining_date_str = formatDateTime(offer_data['joining_date'], include_time=False)
+    
+    html_message = f"""
+    <html>
+    <body>
+        <p>Hi {student.name} ({student.roll_no}),</p>
+        <p>Congratulations! We are pleased to inform you that you have been <strong>Selected</strong> for the <strong>{drive.JobTitle}</strong> position at <strong>{company.company_name}</strong>.</p>
+        <p>Your official offer letter has been generated. Please review the details of the offer.</p>
+        <p><strong>Key Offer Dates:</strong></p>
+        <ul>
+            <li><strong>Offer Expiration Date:</strong> {expiry_date_str}</li>
+            <li><strong>Proposed Joining Date:</strong> {joining_date_str}</li>
+        </ul>
+        <p>Please log in to the placement portal to view and respond to the offer: <a href="http://127.0.0.1:5000/login">Login to Portal</a></p>
+        <br>
+        <p>Best Regards,</p>
+        <p>The Placement Portal Team</p>
+    </body>
+    </html>
+    """
+    
+    send_email(
+        to_address=student.user.email,
+        subject=subject,
+        message=html_message,
+        attachment_file=save_path
+    )
+    
+    cache.clear()
+
+    return {"message": "Offer letter generated and sent successfully.", "file_url": f'/{web_accessible_path}'}
+
+
 @shared_task(bind=True, name="generate_offer_letter")
 def generate_offer_letter_task(self, application_id, offer_data):
     try:
-        application = Application.query.get(application_id)
-        if not application:
-            raise ValueError("Application not found")
-        if not offer_data:
-            raise ValueError("Offer data is required to generate the offer letter")
-        student = application.student
-        drive = application.drive
-        company = drive.company
+        return generate_offer_letter_internal(application_id, offer_data)
+    except Exception as e:
+        self.update_state(state='FAILURE', meta={'exc_type': type(e).__name__, 'exc_message': str(e)})
+        raise e
 
-        # Prepare data for the template
-        template_data = {
-            "student": student,
-            "drive": drive,
-            "company": company,
-            "joining_date": formatDateTime(offer_data['joining_date'], include_time=False),
-            "expiry_date": formatDateTime(offer_data['expiry_date'], include_time=False),
-            "message": offer_data.get('message'),
-            "generation_date": formatDateTime(get_ist_now(), include_time=False)
-        }
 
-        # Render the HTML offer letter
-        template_path = os.path.join(current_app.root_path, 'templates', 'offer_letter_template.html')
-        with open(template_path) as file:
-            template = Template(file.read())
-        html_content = template.render(template_data)
-
-        # Save the generated HTML file
-        filename = f"offer_{application.id}_{student.roll_no}_{uuid.uuid4().hex[:8]}.html"
-        reports_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'offer_letters')
-        os.makedirs(reports_dir, exist_ok=True)
-        save_path = os.path.join(reports_dir, filename)
-        
-        with open(save_path, 'w', encoding='utf-8') as f:
-            f.write(html_content)
-
-        # Find or create a Placement record
-        placement = Placement.query.filter_by(application_id=application.id).first()
-        if not placement:
-            placement = Placement(
-                application_id=application.id,
-            )
-            db.session.add(placement)
-
-        # Update the placement record with offer details
-        web_accessible_path = os.path.join('static/uploads/offer_letters', filename).replace('\\', '/')
-        placement.offer_letter = web_accessible_path
-        placement.offer_expiry_date = datetime.strptime(offer_data['expiry_date'], '%Y-%m-%d').date()
-        placement.joining_date = datetime.strptime(offer_data['joining_date'], '%Y-%m-%d').date()
-        placement.message = offer_data.get('message')
-        placement.offer_sent = True
-        placement.offer_sent_date = get_ist_now()
-        placement.offer_status = 'Sent'
-
-        # Create a notification for the student
-        from application.models import Notification
-        msg = f"Congratulations! You have received an offer letter from '{company.company_name}' for '{drive.JobTitle}'."
-        if Notification.should_notify(msg):
-            new_notif = Notification(
-                user_id=student.user_id,
-                message=msg,
-                type="success"
-            )
-            db.session.add(new_notif)
-
-        db.session.commit()
-
-        # Send the selection update & offer letter email with expiry date and attachment
-        subject = f"Selected & Offer Letter for '{drive.JobTitle}'"
-        expiry_date_str = formatDateTime(offer_data['expiry_date'], include_time=False)
-        joining_date_str = formatDateTime(offer_data['joining_date'], include_time=False)
-        
-        html_message = f"""
-        <html>
-        <body>
-            <p>Hi {student.name} ({student.roll_no}),</p>
-            <p>Congratulations! We are pleased to inform you that you have been <strong>Selected</strong> for the <strong>{drive.JobTitle}</strong> position at <strong>{company.company_name}</strong>.</p>
-            <p>Your official offer letter has been generated. Please review the details of the offer.</p>
-            <p><strong>Key Offer Dates:</strong></p>
-            <ul>
-                <li><strong>Offer Expiration Date:</strong> {expiry_date_str}</li>
-                <li><strong>Proposed Joining Date:</strong> {joining_date_str}</li>
-            </ul>
-            <p>Please log in to the placement portal to view and respond to the offer: <a href="http://127.0.0.1:5000/login">Login to Portal</a></p>
-            <br>
-            <p>Best Regards,</p>
-            <p>The Placement Portal Team</p>
-        </body>
-        </html>
-        """
-        
-        send_email(
-            to_address=student.user.email,
-            subject=subject,
-            message=html_message,
-            attachment_file=save_path
-        )
-        
-        cache.clear()
-
-        return {"message": "Offer letter generated and sent successfully.", "file_url": f'/{web_accessible_path}'}
-
+@shared_task(bind=True, name="generate_bulk_offers")
+def generate_bulk_offers_task(self, application_ids, offer_data):
+    try:
+        results = []
+        for app_id in application_ids:
+            try:
+                res = generate_offer_letter_internal(app_id, offer_data)
+                results.append(res)
+            except Exception as inner_e:
+                print(f"Error generating bulk offer for application {app_id}: {inner_e}")
+        return {"message": f"Successfully processed {len(results)} bulk offers.", "results": results}
     except Exception as e:
         self.update_state(state='FAILURE', meta={'exc_type': type(e).__name__, 'exc_message': str(e)})
         raise e
@@ -399,10 +415,15 @@ def send_drive_status_update_email_task(drive_id, status, remark=None):
             reason_str = remark or drive.Remark or "No reason provided."
             body_content = f"<p>We wish to inform you that your placement drive for the position of <strong>'{job_title}'</strong> has been temporarily <strong>suspended</strong> by the administration.</p><p><strong>Reason for suspension:</strong> <em>{reason_str}</em></p><p>While suspended, students will not be able to view or apply to this drive, and scheduled interviews have been put on hold.</p>"
         elif status == 'Application Closed':
-            subject = f"Your Placement Drive '{job_title}' is now Closed"
+            subject = f"Applications Closed for Placement Drive '{job_title}'"
             status_text = "Application Closed"
             reason_str = remark or drive.Remark or "No reason provided."
-            body_content = f"<p>We wish to inform you that your placement drive for the position of <strong>'{job_title}'</strong> has been <strong>Closed</strong> by the administrator.</p><p><strong>Closing note/reason:</strong> <em>{reason_str}</em></p><p>No new applications will be accepted for this position.</p>"
+            body_content = f"<p>We wish to inform you that applications for your placement drive for the position of <strong>'{job_title}'</strong> have been <strong>Closed</strong>.</p><p><strong>Note/Reason:</strong> <em>{reason_str}</em></p><p>No new student applications will be accepted for this position, but you can continue to screen and interview currently applied candidates.</p>"
+        elif status == 'Closed':
+            subject = f"Your Placement Drive '{job_title}' is now finally Closed"
+            status_text = "Closed"
+            reason_str = remark or drive.Remark or "No reason provided."
+            body_content = f"<p>We wish to inform you that your placement drive for the position of <strong>'{job_title}'</strong> is now finally <strong>Closed</strong>.</p><p><strong>Closing note/reason:</strong> <em>{reason_str}</em></p><p>All remaining uncompleted applications and upcoming interviews have been cancelled/rejected.</p>"
         else:
             subject = f"Placement Drive '{job_title}' Status Updated"
             status_text = status
@@ -495,7 +516,7 @@ def send_application_rejection_revoke_email(application_id):
         <body>
             <p>Hi {student.name} ({student.roll_no}),</p>
             <p>We wanted to inform you that the rejection of your application for the <strong>{drive.JobTitle}</strong> position at <strong>{drive.company_name}</strong> has been revoked.</p>
-            <p> Reason: {application.rejection_revoke_note if application.rejection_revoke_note else 'No reason provided.'}</p>
+            <p> Reason: {application.Remark if application.Remark else 'No reason provided.'}</p>
             <p>Your application status has been updated accordingly. Please log in to the placement portal to view the details and next steps: <a href="{application_url}">Login</a></p>
             <p>Best Regards,</p>
             <p>The Placement Portal Team</p>
@@ -520,7 +541,11 @@ def send_application_status_update_email_task(application_id):
         subject = f"Application Status Update: {drive.JobTitle}"
         application_url = "http://127.0.0.1:5000/login"
         
-        display_reason = application.rejection_reason
+        if application.status == 'Rejected':
+            display_reason = application.Remark
+        else:
+            display_reason = application.internal_rejection_remark
+
         if display_reason == "due to bulk rejection on closing the round":
             display_reason = "Position closed"
 
@@ -547,16 +572,24 @@ def send_application_status_update_email_task(application_id):
     
 
 @shared_task(ignore_results=False, name="generate_admin_monthly_report", bind=True)
-def generate_admin_monthly_report_task(self):
+def generate_admin_monthly_report_task(self, month=None, year=None):
         
         now = get_ist_now()
-        # For end-of-month report, get data for the *previous* month
-        first_day_of_current_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        last_day_of_previous_month = first_day_of_current_month - timedelta(days=1)
-        first_day_of_previous_month = last_day_of_previous_month.replace(day=1)
+        if month is not None and year is not None:
+            # Custom month triggered manually
+            start_date = datetime(year, month, 1, 0, 0, 0)
+            if month == 12:
+                end_date = datetime(year + 1, 1, 1, 0, 0, 0)
+            else:
+                end_date = datetime(year, month + 1, 1, 0, 0, 0)
+        else:
+            # Automatic: For end-of-month report, get data for the *previous* month
+            first_day_of_current_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            last_day_of_previous_month = first_day_of_current_month - timedelta(days=1)
+            first_day_of_previous_month = last_day_of_previous_month.replace(day=1)
 
-        start_date = first_day_of_previous_month
-        end_date = first_day_of_current_month
+            start_date = first_day_of_previous_month
+            end_date = first_day_of_current_month
         
         new_drives = PlacementDrives.query.filter(
             PlacementDrives.PostedDate >= start_date.date(),
@@ -569,7 +602,7 @@ def generate_admin_monthly_report_task(self):
         drives_with_stats = []
         for drive in new_drives:
             apps = drive.application
-            status_counts = Counter('Rejected' if app.rejection_reason else app.status for app in apps)
+            status_counts = Counter('Rejected' if app.internal_rejection_remark else app.status for app in apps)
             drives_with_stats.append({
                 'drive': drive,
                 'stats': {
@@ -654,6 +687,18 @@ def generate_admin_monthly_report_task(self):
         avg_stipend = round(total_stipend_sum / intern_placements_count, 2) if intern_placements_count > 0 else 0.0
         top_roles = Counter(app.drive.JobTitle for app in placements_this_month if app.drive).most_common(3)
 
+        # Calculate monthly rejections and interviews
+        total_rejections_this_month = Application.query.filter(
+            Application.status == 'Rejected',
+            Application.updated_time >= start_date,
+            Application.updated_time < end_date
+        ).count()
+
+        total_interviews_this_month = Interview.query.filter(
+            Interview.datetime >= start_date,
+            Interview.datetime < end_date
+        ).count()
+
         # Generate HTML Report
         report_month_str = start_date.strftime('%B %Y')
         template_path = os.path.join(current_app.root_path, 'templates', 'monthly_admin_report.html')
@@ -672,7 +717,9 @@ def generate_admin_monthly_report_task(self):
             'highest_stipend': highest_stipend,
             'avg_stipend': avg_stipend,
             'intern_placements_count': intern_placements_count,
-            'top_roles': top_roles
+            'top_roles': top_roles,
+            'total_rejections': total_rejections_this_month,
+            'total_interviews': total_interviews_this_month
         }
         html_content = format_report(template_path, data_for_template)
 

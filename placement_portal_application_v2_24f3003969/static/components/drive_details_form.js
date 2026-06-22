@@ -1,5 +1,5 @@
 import DriveDetailView from './drive_details_view.js';
-import { getMinDate } from '../utils/formatDateTime.js';
+import { getMinDate, formatDateTime } from '../utils/formatDateTime.js';
 
 const DriveDetailsForm = {
     props: {
@@ -95,7 +95,7 @@ const DriveDetailsForm = {
                 <div class="row g-4 mb-2">
                     <div class="col-md-12">
                         <div class="p-4 border rounded-4 bg-light shadow-sm">
-                            <h6 class="fw-bold mb-3 text-secondary border-bottom pb-2 required-label">Job Description</h6>
+                            <h4 class="fw-bold mb-3 text-secondary border-bottom pb-2 required-label">Job Description</h4>
                             <div class="bg-white">
                                 <quill-editor 
                                     v-model="form.JobDescription" 
@@ -230,12 +230,11 @@ const DriveDetailsForm = {
             selectedTemplateId: null,
             saveAsTemplate: false,
             newTemplateName: '',
-            // Toolbar configuration settings mapping standard formats
             editorOptions: {
                 placeholder: 'Provide comprehensive role definitions, responsibilities, and clear qualifications parameters...',
                 modules: {
                     toolbar: [
-                        [{ 'header': [3, 4, 5, false] }],
+                        [{ 'header': [4, 5, 6, false] }],
                         ['bold', 'italic', 'underline'],
                         [{ 'list': 'ordered' }, { 'list': 'bullet' }],
                         ['clean']
@@ -273,12 +272,17 @@ const DriveDetailsForm = {
             let formattedDeadline = this.form.ApplyDeadline;
             if (this.form.ApplyDeadline) {
                 try {
-                    formattedDeadline = new Date(this.form.ApplyDeadline).toLocaleString('en-IN', { dateStyle: 'medium' });
+                    formattedDeadline = formatDateTime(this.form.ApplyDeadline, false);
                 } catch(e) { }
             }
 
+            const depts = (!this.form.Departments || this.form.Departments.length === 0)
+                ? this.availableDepartments.map(d => d.department)
+                : this.form.Departments;
+
             return {
                 ...this.form,
+                Departments: depts,
                 ApplyDeadline: formattedDeadline,
                 InterviewRounds: roundsList,
             };
@@ -307,7 +311,7 @@ const DriveDetailsForm = {
             const res = await fetch(`/api/drive_templates/${templateId}`, { headers: { 'Authentication-Token': localStorage.getItem('token') } });
             if (res.ok) {
                 const templateData = await res.json();
-                const { id, TemplateName, Type, ...formData } = templateData; // Exclude Type to preserve the selected Job/Internship type
+                const { id, TemplateName, Type, ...formData } = templateData;
 
                 if (Array.isArray(formData.InterviewRounds)) {
                     formData.InterviewRounds = formData.InterviewRounds.join(', ');
@@ -347,6 +351,9 @@ const DriveDetailsForm = {
             }
             
             const finalForm = { ...this.form, InterviewRounds: roundsList };
+            if (!finalForm.Departments || finalForm.Departments.length === 0) {
+                finalForm.Departments = this.availableDepartments.map(d => d.department);
+            }
 
             if (this.mode === 'template') {
                 this.$emit('save-template', finalForm);
@@ -378,6 +385,9 @@ const DriveDetailsForm = {
             }
 
             const finalForm = { ...this.form, InterviewRounds: roundsList };
+            if (!finalForm.Departments || finalForm.Departments.length === 0) {
+                finalForm.Departments = this.availableDepartments.map(d => d.department);
+            }
 
             if (this.saveAsTemplate && this.newTemplateName) {
                 const templatePayload = { ...finalForm, TemplateName: this.newTemplateName };
@@ -395,20 +405,19 @@ const DriveDetailsForm = {
                 }
             }
 
-            if(finalForm.Departments.length > 0){
-                const res = await fetch('/api/placement_drives', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authentication-Token': localStorage.getItem('token')
-                    },
-                    body: JSON.stringify(finalForm)
-                });
-                if (res.ok) {
-                    this.$emit('success');
-                }
+            const res = await fetch('/api/placement_drives', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authentication-Token': localStorage.getItem('token')
+                },
+                body: JSON.stringify(finalForm)
+            });
+            if (res.ok) {
+                this.$emit('success');
             } else {
-                alert("Choose at least one targeted department.");
+                const err = await res.json();
+                alert(`Failed to create drive: ${err.message || 'Unknown error'}`);
             }
             this.loading = false;
         }

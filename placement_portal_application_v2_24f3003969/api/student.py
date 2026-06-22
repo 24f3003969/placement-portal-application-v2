@@ -90,6 +90,7 @@ student_app_fields = {
     'available_immediately': fields.Boolean,
     'available_from': fields.String(attribute=lambda x: x.available_from.isoformat() if x.available_from else None),
     'availability_remarks': fields.String,
+    'rejection_reason': fields.String(attribute=lambda x: (x.Remark if x.Remark else (x.internal_rejection_remark if x.internal_rejection_remark and any(sys_term in x.internal_rejection_remark for sys_term in ['Automatically', 'Offer rejected', 'Eligibility lost']) else None)) if x.status == 'Rejected' else None),
     'drive': fields.Nested({
         'DriveID': fields.Integer,
         'JobTitle': fields.String,
@@ -174,8 +175,8 @@ class ApplyForDrive(Resource):
 
             # Verify if the drive is closed or deadline has passed
             today_kolkata = get_ist_date()
-            if drive.Status == 'Application Closed' or (drive.ApplyDeadline and drive.ApplyDeadline < today_kolkata):
-                if drive.Status != 'Application Closed':
+            if drive.Status in ['Application Closed', 'Closed'] or (drive.ApplyDeadline and drive.ApplyDeadline < today_kolkata):
+                if drive.Status not in ['Application Closed', 'Closed']:
                     drive.Status = 'Application Closed'
                     db.session.commit()
                     cache.clear()
@@ -275,7 +276,7 @@ class StudentDetailsAPI(Resource):
             if not stud_profile:
                 return {"message": "Profile not found"}, 404
             stud = stud_profile.to_dict()
-            return marshal(stud, student_profile_files), 200
+            return marshal(stud, student_profile_files), 200, {'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'}
         except Exception as e:
             print(f"Error in StudentDetailsAPI.get: {e}")
             return {"error": str(e)}, 500
@@ -551,7 +552,7 @@ class StudentApplicationsAPI(Resource):
                 joinedload(Application.placement),
                 joinedload(Application.drive).joinedload(PlacementDrives.company)
             ).all()
-            return applications, 200
+            return applications, 200, {'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'}
         except Exception as e:
             print(f"Error in StudentProfileApi GET: {e}")
             return {"error": str(e)}, 500
@@ -719,6 +720,6 @@ class StudentInterviewsAPI(Resource):
             joinedload(Interview.application).joinedload(Application.drive).joinedload(PlacementDrives.company)
         ).order_by(Interview.datetime.desc()).all()
 
-        return marshal(interviews, student_interview_fields), 200
+        return marshal(interviews, student_interview_fields), 200, {'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'}
 
 student_api.add_resource(StudentInterviewsAPI, '/student_interviews')

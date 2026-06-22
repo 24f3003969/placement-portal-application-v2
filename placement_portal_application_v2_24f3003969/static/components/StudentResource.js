@@ -51,13 +51,13 @@ const StudentResource = {
                     </div>
 
                     <div v-if="currentUserRole === 'stud' && drive.Status !== 'Rejected'" class="d-flex align-items-center gap-2">
-                        <span v-if="drive.Status === 'Application Closed' || isDeadlinePassed(drive.ApplyDeadline)" class="badge bg-danger">Application Closed</span>
+                        <span v-if="['Application Closed', 'Closed'].includes(drive.Status) || isDeadlinePassed(drive.ApplyDeadline)" class="badge bg-danger">Application Closed</span>
                         <span v-else-if="!eligibilityStatus.eligible" class="badge bg-danger" :title="eligibilityStatus.reason">Not Eligible</span>
                         
                         <button v-if="hasApplied" class="btn btn-warning btn-sm px-3 rounded-pill" disabled>
                             Applied
                         </button>
-                        <button v-else-if="eligibilityStatus.eligible && drive.Status !== 'Application Closed' && !isDeadlinePassed(drive.ApplyDeadline)" @click="$emit('apply', drive.DriveID)" class="btn btn-primary btn-sm px-3 rounded-pill" style="background-color: #003366; border: none;">
+                        <button v-else-if="eligibilityStatus.eligible && !['Application Closed', 'Closed'].includes(drive.Status) && !isDeadlinePassed(drive.ApplyDeadline)" @click="$emit('apply', drive.DriveID)" class="btn btn-primary btn-sm px-3 rounded-pill" style="background-color: #003366; border: none;">
                             Apply Now
                         </button>
                         <button v-else @click="$emit('apply', drive.DriveID)" class="btn btn-outline-secondary btn-sm px-3 rounded-pill bg-white">
@@ -72,7 +72,13 @@ const StudentResource = {
                     </div>
                     <div v-else-if="currentUserRole === 'comp'">
                         <button @click="$emit('view', drive)" class="btn btn-outline-primary btn-sm">View</button>
-                        <button v-if="drive.Status === 'Active'" @click="$emit('close', drive.DriveID)" class="btn btn-outline-danger btn-sm ms-2">Close</button>
+                        <span v-if="drive.Status === 'Active'">
+                            <button @click="$emit('close-applications', drive.DriveID)" class="btn btn-outline-warning btn-sm ms-2">Close Applications</button>
+                            <button @click="$emit('close-drive', drive.DriveID)" class="btn btn-outline-danger btn-sm ms-2">Close Drive</button>
+                        </span>
+                        <span v-else-if="drive.Status === 'Application Closed'">
+                            <button @click="$emit('close-drive', drive.DriveID)" class="btn btn-outline-danger btn-sm ms-2">Close Drive</button>
+                        </span>
                     </div>
 
                     <div v-if="currentUserRole === 'admin'">
@@ -142,12 +148,13 @@ const StudentResource = {
     methods: {
         formatDateTime,
         statusBadgeClass(status) {
-            switch (status) {
+             switch (status) {
                 case 'Active': return 'bg-success';
                 case 'Pending': return 'bg-info text-dark';
                 case 'Suspended': return 'bg-warning text-dark';
                 case 'Rejected':
                 case 'Application Closed': return 'bg-danger';
+                case 'Closed': return 'bg-dark';
                 default: return 'bg-secondary';
             }
         },

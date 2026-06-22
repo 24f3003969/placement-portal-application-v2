@@ -67,7 +67,7 @@ def get_drive_insights(drive_id):
         }
 
     # 1. Pass Rate (percentage of students who passed initial screening)
-    successful_screenings = sum(1 for app in applications if app.status in ['Shortlisted', 'Selected', 'Hired'])
+    successful_screenings = sum(1 for app in applications if app.status in ['Shortlisted', 'Interviewing', 'Selected', 'Hired'])
     pass_rate = round((successful_screenings / total_applicants) * 100, 2) if total_applicants > 0 else 0
 
     # 2. Average CGPA (All)
@@ -75,7 +75,7 @@ def get_drive_insights(drive_id):
     avg_cgpa_all = round(total_cgpa_all / total_applicants, 2) if total_applicants > 0 else 0
 
     # 3. Average CGPA (Shortlisted)
-    shortlisted_apps = [app for app in applications if app.status == 'Shortlisted']
+    shortlisted_apps = [app for app in applications if app.status in ['Shortlisted', 'Interviewing', 'Selected', 'Hired']]
     if shortlisted_apps:
         total_cgpa_shortlisted = sum(float(app.student.cgpa) for app in shortlisted_apps if app.student.cgpa is not None)
         avg_cgpa_shortlisted = round(total_cgpa_shortlisted / len(shortlisted_apps), 2)

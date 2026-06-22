@@ -99,7 +99,7 @@ const StudentApplicationsAndInterviews = {
                                     </td>
                                     <td class="text-end pe-4">
                                         <button v-if="app.status === 'Pending'" @click="cancelApplication(app.id)" class="btn btn-sm btn-outline-danger">Cancel</button>
-                                        <button v-else-if="['Shortlisted', 'Interview', 'Interviewing'].includes(app.status)" @click="viewInterviewDetails(app.id)" class="btn btn-sm btn-outline-primary">View Interview</button>
+                                        <button v-else-if="['Shortlisted', 'Interviewing'].includes(app.status)" @click="viewInterviewDetails(app.id)" class="btn btn-sm btn-outline-primary">View Interview</button>
                                         <template v-else-if="app.status === 'Selected'">
                                             <span v-if="!app.offer_letter" class="badge bg-warning text-dark px-2 py-1"><i class="bi bi-hourglass-split me-1"></i>Offer Awaiting</span>
                                             <button v-else @click="viewPlacementOffer(app.id)" class="btn btn-sm btn-success shadow-sm">View Offer</button>
@@ -115,6 +115,64 @@ const StudentApplicationsAndInterviews = {
                         <i class="bi bi-folder-x fs-1 d-block mb-3 opacity-50"></i>
                         <h5>No Active Applications</h5>
                         <p>You haven't applied to any drives yet, or your applications are no longer active.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Past Applications Card -->
+            <div class="card shadow-sm border-0 mb-4 mt-3">
+                <div class="card-header bg-white py-3">
+                    <h5 class="fw-bold mb-0">Past Applications (Last 5)</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div v-if="pastApplications.length > 0" class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4">Job Role</th>
+                                    <th>Status</th>
+                                    <th>Applied On</th>
+                                    <th>Resume</th>
+                                    <th class="text-end pe-4">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="app in pastApplications" :key="app.id">
+                                    <td class="ps-2 py-1">
+                                        <div class="d-flex align-items-center">
+                                            <div class="bg-secondary text-white rounded text-center me-3 d-flex align-items-center justify-content-center fw-bold shadow-sm" style="width: 40px; height: 40px; font-size: 1.2rem;">
+                                                {{ app.drive.company_name.charAt(0).toUpperCase() }}
+                                            </div>
+                                            <div>
+                                                <h6 class="mb-0 fw-bold">
+                                                    <a href="#" @click.prevent="showDriveInfo(app)" class="text-decoration-none text-dark hover-primary">{{ app.drive.JobTitle }}</a>
+                                                </h6>
+                                                <small class="text-muted">{{ app.drive.company_name }}</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span :class="statusBadge(app.rejection_reason ? 'Rejected' : app.status)">{{ app.rejection_reason ? 'Rejected' : app.status }}</span>
+                                    </td>
+                                    <td>{{ formatDateTime(app.application_datetime) }}</td>
+                                    <td>
+                                        <a v-if="app.resume || (profile && profile.resume)" :href="'/' + (app.resume || (profile && profile.resume))" target="_blank" class="btn btn-sm btn-light text-danger border" title="View Resume">
+                                            <i class="bi bi-file-earmark-pdf-fill"></i>
+                                        </a>
+                                        <span v-else class="text-muted small">N/A</span>
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <button class="btn btn-sm btn-outline-secondary" @click="showRemark(app.rejection_reason || app.offer_message || 'No remarks logged.')">
+                                            Remarks
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div v-else class="text-center p-4 text-muted">
+                        <i class="bi bi-archive fs-2 d-block mb-2 opacity-50"></i>
+                        <p class="mb-0 small">No past applications found.</p>
                     </div>
                 </div>
             </div>
@@ -264,7 +322,7 @@ const StudentApplicationsAndInterviews = {
         <div v-if="remarkToShow" class="remark-overlay" @click="remarkToShow = null">
             <div class="remark-box card card-body shadow-lg border-0" @click.stop>
                 <div class="d-flex justify-content-between align-items-center">
-                    <h6 class="fw-bold mb-0">Interview Remark</h6>
+                    <h6 class="fw-bold mb-0">Remark / Feedback</h6>
                     <button type="button" class="btn-close" @click="remarkToShow = null"></button>
                 </div>
                 <hr>
@@ -453,7 +511,7 @@ const StudentApplicationsAndInterviews = {
     },
     computed: {
         sortedApplications() {
-            const statusOrder = { 'Selected': 1, 'Shortlisted': 2, 'Pending': 3, 'Rejected': 4, 'Hired': 5, 'Cancelled': 6 };
+            const statusOrder = { 'Selected': 1, 'Shortlisted': 2, 'Interviewing': 3, 'Pending': 4};
             return [...this.allApplications]
                 .filter(app => !app.rejection_reason && app.status !== 'Rejected' && app.status !== 'Hired' && app.status !== 'Cancelled')
                 .sort((a, b) => {
@@ -461,6 +519,12 @@ const StudentApplicationsAndInterviews = {
                     const statusB = statusOrder[b.status] || 99;
                     return statusA - statusB;
                 });
+        },
+        pastApplications() {
+            return [...this.allApplications]
+                .filter(app => app.rejection_reason || app.status === 'Rejected' || app.status === 'Hired' || app.status === 'Cancelled')
+                .sort((a, b) => new Date(b.application_datetime) - new Date(a.application_datetime))
+                .slice(0, 5);
         },
         applicationInsights() {
             const now = new Date();
@@ -472,9 +536,19 @@ const StudentApplicationsAndInterviews = {
                 return appDate >= startOfMonth && appDate <= endOfMonth;
             });
 
-            const rejectedPreScreening = applicationsThisMonth.filter(app => (app.rejection_reason || app.status === 'Rejected') && (!app.interviews || app.interviews.length === 0)).length;
-            const rejectedFirstRound = applicationsThisMonth.filter(app => (app.rejection_reason || app.status === 'Rejected') && app.interviews && app.interviews.length > 0 && app.interviews.some(int => int.round_no === 1 && int.result === 'failed')).length;
-            const selectedThisMonth = applicationsThisMonth.filter(app => app.status === 'Selected' && !app.rejection_reason).length;
+            const rejectedPreScreening = applicationsThisMonth.filter(app => {
+                const appInterviews = this.allInterviews.filter(i => parseInt(i.application_id) === parseInt(app.id));
+                return (app.status === 'Rejected') && (appInterviews.length === 0);
+            }).length;
+
+            const rejectedFirstRound = applicationsThisMonth.filter(app => {
+                const appInterviews = this.allInterviews.filter(i => parseInt(i.application_id) === parseInt(app.id));
+                return (app.rejection_reason || app.status === 'Rejected') && 
+                       appInterviews.length > 0 && 
+                       appInterviews.some(int => parseInt(int.round_no) === 1 && int.result === 'failed');
+            }).length;
+
+            const selectedThisMonth = applicationsThisMonth.filter(app => ['Selected', 'Hired'].includes(app.status) && !app.rejection_reason).length;
 
             return {
                 totalApplicationsThisMonth: applicationsThisMonth.length,

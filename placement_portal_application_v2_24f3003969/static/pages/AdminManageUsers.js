@@ -147,27 +147,95 @@ const AdminManageUsers = {
                             <h5 class="modal-title fw-bold">Applications for {{ selectedStudent?.name }}</h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
-                        <div class="modal-body bg-light" style="max-height: 60vh; overflow-y: auto;">
+                        <div class="modal-body bg-light" style="max-height: 70vh; overflow-y: auto;">
                             <div v-if="studentApplications.length > 0">
-                                <div v-for="app in studentApplications" :key="app.id" class="card mb-3 shadow-sm border-0 rounded-4">
-                                    <div class="card-body">
-                                        <div class="d-flex justify-content-between align-items-start">
-                                            <div>
-                                                <h5 class="card-title fw-bold text-primary mb-1">{{ app.drive.JobTitle }}</h5>
-                                                <h6 class="card-subtitle text-muted mb-3"><i class="bi bi-building me-1"></i>{{ app.drive.company_name }}</h6>
-                                            </div>
-                                            <span class="badge fs-6" :class="app.rejection_reason || app.status === 'Rejected' ? 'bg-danger' : app.status === 'Hired' ? 'bg-success' : 'bg-warning text-dark'">
-                                                {{ app.rejection_reason ? 'Rejected' : app.status }}
-                                            </span>
-                                        </div>
-                                        <hr class="my-2">
-                                        <div class="d-flex justify-content-between align-items-center mt-2">
-                                            <small class="text-muted"><i class="bi bi-calendar me-1"></i>Applied: {{ formatDateTime(app.application_date, false) }}</small>
-                                            <a v-if="app.resume" :href="'/' + app.resume" target="_blank" class="btn btn-sm btn-outline-dark">
-                                                <i class="bi bi-file-earmark-pdf me-1"></i>View Resume
-                                            </a>
-                                        </div>
-                                    </div>
+                                <div class="table-responsive bg-white rounded border shadow-sm">
+                                    <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.8rem; text-align: left;">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th class="ps-3 py-2">Job Role</th>
+                                                <th>Status</th>
+                                                <th>Applied On</th>
+                                                <th>Remarks</th>
+                                                <th>Interviews</th>
+                                                <th class="text-end pe-3">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <!-- Loop and collapse logic -->
+                                            <template v-for="app in studentApplications" :key="app.id">
+                                                <tr>
+                                                    <td class="ps-3 py-2">
+                                                        <strong class="text-primary d-block">{{ app.drive.JobTitle }}</strong>
+                                                        <small class="text-muted"><i class="bi bi-building me-1"></i>{{ app.drive.company_name }}</small>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge px-2 py-1" style="font-size: 0.7rem;" :class="app.rejection_reason || app.status === 'Rejected' ? 'bg-danger' : app.status === 'Hired' ? 'bg-success' : 'bg-warning text-dark'">
+                                                            {{ app.rejection_reason ? 'Rejected' : app.status }}
+                                                        </span>
+                                                    </td>
+                                                    <td class="text-muted">{{ formatDateTime(app.application_date, false) }}</td>
+                                                    <td>
+                                                        <span v-if="app.status === 'Rejected' || app.rejection_reason">
+                                                            <a href="#" class="fw-semibold text-danger text-decoration-underline" @click.prevent="showRemarksDetail(app.rejection_reason, app.note_for_student)">View</a>
+                                                        </span>
+                                                        <span v-else class="text-muted small">-</span>
+                                                    </td>
+                                                    <td>
+                                                        <span v-if="app.interviews && app.interviews.length > 0">
+                                                            <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size: 0.7rem;" @click="toggleInterviewCollapse(app.id)">
+                                                                Interviews ({{ app.interviews.length }})
+                                                            </button>
+                                                        </span>
+                                                        <span v-else class="text-muted small">-</span>
+                                                    </td>
+                                                    <td class="text-end pe-3">
+                                                        <a v-if="app.resume" :href="'/' + app.resume" target="_blank" class="btn btn-sm btn-outline-dark py-0.5 px-2 fw-medium me-1" style="font-size: 0.75rem;">
+                                                            Resume
+                                                        </a>
+                                                    </td>
+                                                </tr>
+                                                <tr v-if="expandedAppInterviews === app.id" class="table-light">
+                                                    <td colspan="6" class="p-3">
+                                                        <div class="card border p-2 shadow-xs bg-white rounded">
+                                                            <h6 class="fw-bold small text-muted mb-2"><i class="bi bi-calendar-event me-1"></i> Interview History for {{ app.drive.JobTitle }}:</h6>
+                                                            <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.75rem;">
+                                                                <thead class="table-light">
+                                                                    <tr>
+                                                                        <th>Round</th>
+                                                                        <th>Date & Time</th>
+                                                                        <th>Status</th>
+                                                                        <th>Verdict</th>
+                                                                        <th>Remark</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    <tr v-for="i in app.interviews" :key="i.id">
+                                                                        <td><strong>R{{ i.round_no }}: {{ i.round_name }}</strong></td>
+                                                                        <td>{{ i.datetime_formatted }}</td>
+                                                                        <td>
+                                                                            <span class="badge" :class="i.status === 'scheduled' ? 'bg-primary' : i.status === 'completed' ? 'bg-success' : 'bg-secondary'">
+                                                                                {{ i.status }}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td>
+                                                                            <span v-if="i.result" class="badge" :class="i.result === 'passed' ? 'bg-success' : 'bg-danger'">
+                                                                                {{ i.result }}
+                                                                            </span>
+                                                                            <span v-else class="text-muted">-</span>
+                                                                        </td>
+                                                                        <td>
+                                                                            <a href="#" class="text-primary text-decoration-underline" @click.prevent="showRemarksDetail(i.remarks, i.student_facing_remarks)">Remark</a>
+                                                                        </td>
+                                                                    </tr>
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                             <div v-else class="text-center text-muted p-5">
@@ -353,6 +421,28 @@ const AdminManageUsers = {
                 </div>
             </div>
         </div>
+        
+        <!-- Remarks Detail Modal -->
+        <div class="modal fade" id="remarksDetailModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content shadow border-0">
+                    <div class="modal-header bg-light">
+                        <h6 class="modal-title fw-bold">Remarks Detail</h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-3">
+                        <div class="mb-3 text-start">
+                            <span class="d-block small fw-bold text-danger"><i class="bi bi-lock-fill me-1"></i>Internal Remark:</span>
+                            <p class="mb-0 p-2 bg-light rounded text-dark mt-1 small" style="white-space: pre-wrap;">{{ remarksDetail.internal || 'None' }}</p>
+                        </div>
+                        <div class="text-start">
+                            <span class="d-block small fw-bold text-success"><i class="bi bi-eye-fill me-1"></i>Student Facing Remark:</span>
+                            <p class="mb-0 p-2 bg-light rounded text-dark mt-1 small" style="white-space: pre-wrap;">{{ remarksDetail.student || 'None' }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     `,
     components: { StudentProfile, CompanyProfile },
@@ -373,6 +463,9 @@ const AdminManageUsers = {
             showDisabledStudents: false,
             profileModal: null,
             selectedProfile: null,
+            remarksDetail: { internal: '', student: '' },
+            remarksDetailModal: null,
+            expandedAppInterviews: null,
         }
     },
     computed: {
@@ -475,6 +568,15 @@ const AdminManageUsers = {
     },
     methods: {
         formatDateTime,
+        toggleInterviewCollapse(appId) {
+            this.expandedAppInterviews = this.expandedAppInterviews === appId ? null : appId;
+        },
+        showRemarksDetail(internal, student) {
+            this.remarksDetail = { internal: internal || 'None', student: student || 'None' };
+            if (this.remarksDetailModal) {
+                this.remarksDetailModal.show();
+            }
+        },
         async fetchAllData() {
             const studentRes = await fetch(`/api/admin/students`, { headers: { 'Authentication-Token': localStorage.getItem('token') } });
             if (studentRes.ok) this.allStudents = await studentRes.json();
@@ -583,6 +685,7 @@ const AdminManageUsers = {
         this.profileModal = new bootstrap.Modal(document.getElementById('profileModal'));
         this.disableStudentModal = new bootstrap.Modal(document.getElementById('disableStudentModal'));
         this.studentAppsModal = new bootstrap.Modal(document.getElementById('studentAppsModal'));
+        this.remarksDetailModal = new bootstrap.Modal(document.getElementById('remarksDetailModal'));
         this.studentSearchTimeout = null;
         this.companySearchTimeout = null;   
         

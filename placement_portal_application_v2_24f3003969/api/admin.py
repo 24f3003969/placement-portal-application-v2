@@ -132,7 +132,7 @@ class AdminDashboardAPI(Resource):
             CompanyProfile.is_approved == False, User.active == True
         ).count()
         pending_drives_count = PlacementDrives.query.filter_by(Status='Pending').count()
-        total_placed_count = db.session.query(func.count(func.distinct(Application.student_id))).filter(Application.status.in_(['Hired', 'Selected']), Application.rejection_reason == None).scalar() or 0
+        total_placed_count = db.session.query(func.count(func.distinct(Application.student_id))).filter(Application.status.in_(['Hired', 'Selected']), Application.internal_rejection_remark == None).scalar() or 0
 
         pulse_stats = {
             "active_students": active_students_count,
@@ -165,7 +165,7 @@ class AdminDashboardAPI(Resource):
 
         # 3. Activity Hub (Center Column)
         funnel_applied = Application.query.count()
-        funnel_shortlisted = Application.query.filter(Application.status.in_(['Shortlisted', 'Selected', 'Hired']), Application.rejection_reason == None).count()
+        funnel_shortlisted = Application.query.filter(Application.status.in_(['Shortlisted', 'Selected', 'Hired']), Application.internal_rejection_remark == None).count()
         funnel_interviewing = db.session.query(Interview.application_id).distinct().count()
         funnel_hired = Application.query.filter_by(status='Hired').count()
         
@@ -308,8 +308,8 @@ class AdminDashboardAPI(Resource):
 
         shortlisted_this_month = Application.query.filter(
             Application.application_datetime >= current_month_start,
-            Application.status.in_(['Shortlisted', 'Selected', 'Hired', 'Interview']),
-            Application.rejection_reason == None
+            Application.status.in_(['Shortlisted', 'Selected', 'Hired', 'Interviewing']),
+            Application.internal_rejection_remark == None
         ).count()
 
         shortlist_rate = 0
@@ -410,7 +410,7 @@ class AdminCompanyManagementAPI(Resource):
             else:
                 company.has_response_delay = False
 
-            company.approved_drives_count = sum(1 for d in company.drives if d.Status in ['Active', 'Application Closed'])
+            company.approved_drives_count = sum(1 for d in company.drives if d.Status in ['Active', 'Application Closed', 'Closed'])
             company.rejected_drives_count = sum(1 for d in company.drives if d.Status == 'Rejected')
 
             all_departments = [dept for drive in company.drives if drive.Departments for dept in drive.Departments]
@@ -658,7 +658,7 @@ class AdminUnplacedStudentsAPI(Resource):
 
         for student in students_with_applications:
             applications = Application.query.filter_by(student_id=student.id).all()
-            if applications and all(app.status == 'Rejected' or app.rejection_reason is not None for app in applications):
+            if applications and all(app.status == 'Rejected' or app.internal_rejection_remark is not None for app in applications):
                 unplaced_students.append({
                     "user_id": student.user_id,
                     "name": student.name,
@@ -744,15 +744,15 @@ class AdminMultipleOfferHoldersAPI(Resource):
                 Application.student_id == student.id,
                 or_(
                     Application.status.in_(['Selected', 'Hired']),
-                    Application.rejection_reason != None
+                    Application.internal_rejection_remark != None
                 )
             ).all()
 
             for app in offer_apps:
-                if (app.status == 'Rejected' or app.rejection_reason) and not app.placement:
+                if (app.status == 'Rejected' or app.internal_rejection_remark) and not app.placement:
                     continue
 
-                if app.status == 'Rejected' or app.rejection_reason:
+                if app.status == 'Rejected' or app.internal_rejection_remark:
                     decision = "Rejected"
                 elif app.status == 'Selected':
                     decision = "Not Responded Yet"
@@ -940,10 +940,25 @@ class AdminStudentManagementAPI(Resource):
 admin_api.add_resource(AdminStudentManagementAPI, '/admin/students', '/admin/student/<int:user_id>/manage')
 
 
+admin_student_app_fields = student_app_fields.copy()
+admin_student_app_fields['rejection_reason'] = fields.String(attribute='internal_rejection_remark')
+admin_student_app_fields['note_for_student'] = fields.String(attribute='Remark')
+admin_student_app_fields['interviews'] = fields.List(fields.Nested({
+    'id': fields.Integer,
+    'round_no': fields.Integer,
+    'round_name': fields.String,
+    'datetime_formatted': fields.String(attribute=lambda x: x.datetime.strftime('%d %b %Y, %I:%M %p') if x.datetime else 'Not Scheduled'),
+    'location_or_link': fields.String,
+    'status': fields.String,
+    'remarks': fields.String,
+    'student_facing_remarks': fields.String,
+    'result': fields.String
+}))
+
 class AdminViewStudentApplicationsAPI(Resource):
     @auth_required('token')
     @roles_required('admin')
-    @marshal_with(student_app_fields)
+    @marshal_with(admin_student_app_fields)
     def get(self, user_id):
         student = StudentProfile.query.filter_by(user_id=user_id).first()
         if not student:
@@ -1042,14 +1057,14 @@ class AdminManageDrivesAPI(Resource):
         if not drive:
             return {"message": "Drive not found"}, 404
         
-        if drive.Status == 'Application Closed':
+        if drive.Status == 'Closed':
             return {"message": "Closed drives are permanently locked and cannot be modified"}, 400
         
         status = args['status']
         if status == 'Approved':
             status = 'Active'
         elif status == 'Closed':
-            status = 'Application Closed'
+            status = 'Closed'
             
         remarks = args.get('remarks')
         previous_status = drive.Status
@@ -1059,7 +1074,7 @@ class AdminManageDrivesAPI(Resource):
         if status == 'Rejected':
             drive.Remark = remarks
             drive.RejectionDate = get_ist_date()
-        elif status in ['Suspended', 'Application Closed']:
+        elif status in ['Suspended', 'Application Closed', 'Closed']:
             drive.Remark = remarks
 
         from application.tasks import send_drive_status_update_email_task, close_specific_drive_task
@@ -1150,7 +1165,11 @@ class AdminManageDrivesAPI(Resource):
                     interview.status = 'suspended'
         elif status == 'Application Closed':
             send_drive_status_update_email_task.delay(drive.DriveID, 'Application Closed', remarks)
-            create_notification(drive.company.user_id, f"Your placement drive '{drive.JobTitle}' has been closed by the administrator. Reason: {remarks or 'No reason provided.'}", "warning")
+            create_notification(drive.company.user_id, f"Applications for your placement drive '{drive.JobTitle}' have been closed by the administrator. Reason: {remarks or 'No reason provided.'}", "warning")
+            
+        elif status == 'Closed':
+            send_drive_status_update_email_task.delay(drive.DriveID, 'Closed', remarks)
+            create_notification(drive.company.user_id, f"Your placement drive '{drive.JobTitle}' has been finally closed by the administrator. Reason: {remarks or 'No reason provided.'}", "warning")
             
             # Get all applications for this drive that are not in 'Selected' or 'Hired' state
             unhired_apps = Application.query.filter(
@@ -1166,7 +1185,7 @@ class AdminManageDrivesAPI(Resource):
                     if not app.previous_status:
                         app.previous_status = app.status
                     app.status = 'Rejected'
-                    app.rejection_reason = remarks or 'Drive closed by admin'
+                    app.internal_rejection_remark = remarks or 'Drive closed by admin'
                     
                     create_notification(
                         app.student.user_id,

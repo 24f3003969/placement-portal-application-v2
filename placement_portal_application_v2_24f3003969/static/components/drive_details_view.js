@@ -20,13 +20,16 @@ const DriveDetailView = {
         <div class="row g-3">
             <div class="col-md-3">
                 <h6 class="fw-bold mb-1.5 text-uppercase text-muted" style="font-size: 0.75rem;"><i class="bi bi-gear-fill me-1 text-primary"></i>Skills Needed</h6>
-                <div class="d-flex flex-wrap gap-1">
+                <div class="d-flex flex-wrap gap-1" v-if="drive.RequiredSkills && drive.RequiredSkills.length > 0">
                     <span v-for="skill in drive.RequiredSkills" :key="skill" class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 shadow-xs" style="font-size: 0.7rem;">{{ skill }}</span>
+                </div>
+                <div v-else>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 shadow-xs fw-medium" style="font-size: 0.7rem;">No specific skills required.</span>
                 </div>
             </div>
             <div class="col-md-3">
                 <h6 class="fw-bold mb-1.5 text-uppercase text-muted" style="font-size: 0.75rem;"><i class="bi bi-building-fill me-1 text-info"></i>Eligible Departments</h6>
-                <div v-if="formattedDepartments && formattedDepartments.length > 0" class="d-flex flex-wrap gap-1">
+                <div v-if="!isOpenToAll && formattedDepartments && formattedDepartments.length > 0" class="d-flex flex-wrap gap-1">
                     <span v-for="dept in formattedDepartments" :key="dept" class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1 shadow-xs fw-medium" style="font-size: 0.7rem;">
                         {{ dept }}
                     </span>
@@ -61,7 +64,7 @@ const DriveDetailView = {
             </div>
         </div>
         <div class="mt-3 pt-3 border-top">
-            <h6 class="fw-bold mb-2 text-dark">Job Description</h6>
+            <h3 class="fw-bold mb-2 text-dark">Job Description</h3>
             <div class="mb-3 text-secondary small" style="line-height: 1.5;" v-html="drive.JobDescription"></div>
         </div>
 
@@ -97,12 +100,19 @@ const DriveDetailView = {
             </div>
             
             <div v-else-if="mode === 'student'" class="w-100">
-                <div v-if="!eligibilityStatus.eligible" class="alert alert-danger p-3 text-center rounded-4 w-100 shadow-sm mb-0">
+                <div v-if="application" class="alert alert-info w-100 mb-0 py-2.5 small">
+                    <strong><i class="bi bi-info-circle-fill me-2"></i>You have already applied for this drive.</strong>
+                    <span class="d-block mt-1.5">
+                        Current Status: <span class="badge bg-primary ms-1" style="font-size: 0.7rem;">{{ application.status || 'Applied' }}</span>
+                        <span v-if="application.available_immediately" class="badge bg-success ms-2" style="font-size: 0.7rem;">Immediate Joiner</span>
+                        <span v-else class="badge bg-warning text-dark ms-2" style="font-size: 0.7rem;" :title="'Remarks: ' + application.availability_remarks">Delayed (from {{ application.available_from }})</span>
+                    </span>
+                </div>
+                <div v-else-if="!eligibilityStatus.eligible" class="alert alert-danger p-3 text-center rounded-4 w-100 shadow-sm mb-0">
                     <h6 class="fw-bold mb-1.5"><i class="bi bi-x-octagon-fill me-2"></i>Not Eligible to Apply</h6>
                     <p class="mb-0 small">{{ eligibilityStatus.reason }}</p>
                 </div>
-                
-                <div v-else-if="!application">
+                <div v-else-if="!application && drive.Status === 'Active'" class="w-100">
                     <div class="mb-2">
                         <label class="form-label small fw-bold mb-1">Resume Option</label>
                         <select class="form-select form-select-sm" v-model="form.resumeType">
@@ -152,13 +162,8 @@ const DriveDetailView = {
                         {{ loading ? 'Submitting...' : 'Confirm Application' }}
                     </button>
                 </div>
-                <div v-else class="alert alert-info w-100 mb-0 py-2.5 small">
-                    <strong><i class="bi bi-info-circle-fill me-2"></i>You have already applied for this drive.</strong>
-                    <span class="d-block mt-1.5">
-                        Current Status: <span class="badge bg-primary ms-1" style="font-size: 0.7rem;">{{ application.status || 'Applied' }}</span>
-                        <span v-if="application.available_immediately" class="badge bg-success ms-2" style="font-size: 0.7rem;">Immediate Joiner</span>
-                        <span v-else class="badge bg-warning text-dark ms-2" style="font-size: 0.7rem;" :title="'Remarks: ' + application.availability_remarks">Delayed (from {{ application.available_from }})</span>
-                    </span>
+                <div v-else-if="['Closed', 'Application Closed'].includes(drive.Status)" class="alert alert-warning w-100 mb-0 py-2.5 small">
+                    <strong><i class="bi bi-exclamation-triangle-fill me-2"></i>Applications are closed for this drive.</strong>
                 </div>
             </div>
 
@@ -210,6 +215,7 @@ const DriveDetailView = {
             total_applicants: 0,
             shortlisted: 0,
             interviewRounds: [],
+            availableDepartments: [],
         }
     },
     computed: {
@@ -257,6 +263,17 @@ const DriveDetailView = {
             const depts = this.drive?.Departments || this.drive?.departments;
             if (!depts) return [];
             return depts.map(d => typeof d === 'object' ? (d.department || '') : String(d));
+        },
+        isOpenToAll() {
+            const depts = this.drive?.Departments || this.drive?.departments || [];
+            const deptList = depts.map(d => typeof d === 'object' ? (d.department || '') : String(d));
+            if (deptList.length === 0) return true;
+            if (this.availableDepartments && this.availableDepartments.length > 0 && deptList.length >= this.availableDepartments.length) {
+                const availableNames = this.availableDepartments.map(d => d.department.toLowerCase().trim());
+                const selectedNames = deptList.map(d => d.toLowerCase().trim());
+                return availableNames.every(name => selectedNames.includes(name));
+            }
+            return false;
         }
     },
     methods: {
@@ -336,6 +353,11 @@ const DriveDetailView = {
         this.form.driveId = this.drive.DriveID;
         const url = window.location.origin + '/api/apply/' + this.form.driveId;
         
+        fetch('/api/departments', { headers: { 'Authentication-Token': localStorage.getItem('token') } })
+        .then(res => res.ok ? res.json() : [])
+        .then(data => { this.availableDepartments = data; })
+        .catch(e => console.error("Error fetching departments", e));
+
         if (this.mode === 'student') {
             // Check if already applied
             fetch(url, { headers: { 'Authentication-Token': localStorage.getItem('token') } })

@@ -205,7 +205,11 @@ const PlacementDrives = {
             }
             // --- 3.5. RADIO BUTTON FILTER: Status ---
             if (this.currentStatus) {
-                results = results.filter(drive => drive.Status === this.currentStatus);
+                if (this.currentStatus === 'Application Closed') {
+                    results = results.filter(drive => ['Application Closed', 'Closed'].includes(drive.Status));
+                } else {
+                    results = results.filter(drive => drive.Status === this.currentStatus);
+                }
             }
 
             // --- 4. SEARCH FILTER ---

@@ -5,6 +5,9 @@ result_backend='redis://localhost:6379/1'
 enable_utc = True
 timezone = 'Asia/Kolkata'
 broker_connection_retry_on_startup = True
+broker_transport_options = {
+    'visibility_timeout': 604800  # 1 week in seconds (prevents duplicate redelivery of scheduled tasks)
+}
 
 beat_schedule = {
     'generate-and-send-admin-monthly-report': {

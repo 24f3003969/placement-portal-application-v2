@@ -1,11 +1,30 @@
 import StudentResource from '../components/StudentResource.js';
 import DriveDetailsView from '../components/drive_details_view.js'; // Assuming this component can display drive details
 import ViewDrive from '../components/view_drive.js';
+import RejectionModal from '../components/rejection_modal.js';
 import { formatDateTime } from '../utils/formatDateTime.js';
 
 const AdminManageDrives = {
     template: `
     <div class="container-fluid py-4">
+        <div v-if="remarkToShow" class="remark-overlay" @click="remarkToShow = null">
+            <div class="remark-box card card-body shadow-lg" @click.stop>
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold mb-0">Evaluation Remarks</h6>
+                    <button type="button" class="btn-close" @click="remarkToShow = null"></button>
+                </div>
+                <hr class="my-2">
+                <div v-if="remarkToShow.internal" class="mb-2">
+                    <strong class="small text-danger"><i class="bi bi-lock-fill"></i> Confidential Assessment Notes:</strong>
+                    <p class="mb-0 p-2 bg-light rounded mt-1 small text-dark">{{ remarkToShow.internal }}</p>
+                </div>
+                <div v-if="remarkToShow.student">
+                    <strong class="small text-success"><i class="bi bi-eye-fill"></i> Dispatched Note for Student:</strong>
+                    <p class="mb-0 p-2 bg-light rounded mt-1 small text-dark">{{ remarkToShow.student }}</p>
+                </div>
+            </div>
+        </div>
+
         <div v-if="currentView === 'list'">
             <div class="row">
                 <div class="col-md-3">
@@ -28,7 +47,11 @@ const AdminManageDrives = {
                             </div>
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" value="Application Closed" id="statusClosed" v-model="selectedStatuses">
-                                <label class="form-check-label" for="statusClosed">Closed</label>
+                                <label class="form-check-label" for="statusClosed">Applications Closed</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="Closed" id="statusFinallyClosed" v-model="selectedStatuses">
+                                <label class="form-check-label" for="statusFinallyClosed">Closed</label>
                             </div>
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" value="Rejected" id="statusRejected" v-model="selectedStatuses">
@@ -112,6 +135,7 @@ const AdminManageDrives = {
                 @reject="openActionModal($event, 'Reject')"
                 @suspend="openActionModal($event, 'Suspend')"
                 @close="openActionModal($event, 'Close')"
+                @close-applications="openActionModal($event, 'CloseApplications')"
             />
         </div>
         <div v-if="currentView === 'review'">
@@ -206,7 +230,12 @@ const AdminManageDrives = {
                                         <td>{{ formatDateTime(interview.datetime) }}</td>
                                         <td>{{ interview.status }}</td>
                                         <td>{{ interview.result || 'N/A' }}</td>
-                                        <td>{{ interview.remarks || 'N/A' }}</td>
+                                        <td>
+                                            <button v-if="interview.remarks || interview.student_facing_remarks" class="btn btn-sm btn-link p-0 text-decoration-none" @click.stop="showRemarks(interview)">
+                                                View Remarks
+                                            </button>
+                                            <span v-else class="text-muted small">N/A</span>
+                                        </td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -238,9 +267,10 @@ const AdminManageDrives = {
                 </div>
             </div>
         </div>
+        <rejection-modal ref="rejectionModal" type="drive" @confirm="confirmAdminRejectDrive"></rejection-modal>
     </div>
     `,
-    components: { StudentResource, DriveDetailsView, ViewDrive },
+    components: { StudentResource, DriveDetailsView, ViewDrive, RejectionModal },
     data() {
         return {
             allDrives: [], // Master list from backend
@@ -251,14 +281,15 @@ const AdminManageDrives = {
             interviewsModal: null,
             selectedDriveInterviews: [],
             currentView: 'list',
-            selectedStatuses: ['Active', 'Pending', 'Suspended'],
+            selectedStatuses: ['Active', 'Pending', 'Suspended', 'Application Closed', 'Closed'],
             selectedTypes: ['Job', 'Internship'],
             sortBy: 'posted_date_desc',
             interviewToCancel: null,
             cancelReason: '',
             cancelInterviewModal: null,
             actionType: '',
-            actionRemarks: ''
+            actionRemarks: '',
+            remarkToShow: null
         }
     },
     computed: {
@@ -266,24 +297,28 @@ const AdminManageDrives = {
             if (this.actionType === 'Reject') return 'Reject Placement Drive';
             if (this.actionType === 'Suspend') return 'Suspend Placement Drive';
             if (this.actionType === 'Close') return 'Close Placement Drive';
+            if (this.actionType === 'CloseApplications') return 'Close Applications';
             return 'Drive Action';
         },
         remarkLabel() {
             if (this.actionType === 'Reject') return 'Rejection Remarks (Required)';
             if (this.actionType === 'Suspend') return 'Suspension Reason (Required)';
             if (this.actionType === 'Close') return 'Closing Remarks (Optional)';
+            if (this.actionType === 'CloseApplications') return 'Remarks (Optional)';
             return 'Remarks';
         },
         remarkPlaceholder() {
             if (this.actionType === 'Reject') return 'Specify why this placement drive is rejected...';
             if (this.actionType === 'Suspend') return 'Specify why this placement drive is suspended...';
             if (this.actionType === 'Close') return 'Specify why this placement drive is closed...';
+            if (this.actionType === 'CloseApplications') return 'Specify why applications are being closed...';
             return '';
         },
         actionButtonClass() {
             if (this.actionType === 'Reject') return 'btn-danger';
             if (this.actionType === 'Suspend') return 'btn-warning text-dark';
             if (this.actionType === 'Close') return 'btn-danger';
+            if (this.actionType === 'CloseApplications') return 'btn-outline-danger';
             return 'btn-primary';
         },
         isActionSubmitDisabled() {
@@ -378,8 +413,26 @@ const AdminManageDrives = {
             this.selectedDrive = drive;
             this.actionType = type;
             this.actionRemarks = '';
-            if (this.driveActionModal) {
-                this.driveActionModal.show();
+            if (type === 'Reject') {
+                if (this.$refs.rejectionModal) {
+                    this.$refs.rejectionModal.show();
+                }
+            } else {
+                if (this.driveActionModal) {
+                    this.driveActionModal.show();
+                }
+            }
+        },
+        async confirmAdminRejectDrive({ rejection_reason, note_for_student }) {
+            if (!this.selectedDrive) return;
+            const driveId = this.selectedDrive.DriveID;
+            let finalRemarks = rejection_reason;
+            if (note_for_student && note_for_student.trim()) {
+                finalRemarks += "\nNote: " + note_for_student;
+            }
+            await this.updateDriveStatus(driveId, 'Rejected', finalRemarks);
+            if (this.$refs.rejectionModal) {
+                this.$refs.rejectionModal.hide();
             }
         },
         async submitDriveAction() {
@@ -389,7 +442,8 @@ const AdminManageDrives = {
             let status = '';
             if (this.actionType === 'Reject') status = 'Rejected';
             else if (this.actionType === 'Suspend') status = 'Suspended';
-            else if (this.actionType === 'Close') status = 'Application Closed';
+            else if (this.actionType === 'Close') status = 'Closed';
+            else if (this.actionType === 'CloseApplications') status = 'Application Closed';
             
             const confirmed = confirm(`Are you sure you want to change the status of this drive to ${status}?`);
             if (!confirmed) return;
@@ -403,6 +457,7 @@ const AdminManageDrives = {
                 case 'Suspended': return 'bg-warning text-dark';
                 case 'Rejected':
                 case 'Application Closed': return 'bg-danger';
+                case 'Closed': return 'bg-dark';
                 default: return 'bg-secondary';
             }
         },
@@ -483,6 +538,12 @@ const AdminManageDrives = {
                 }
             }
         },
+        showRemarks(interview) {
+            this.remarkToShow = {
+                internal: interview.remarks || "No internal remarks logged.",
+                student: interview.student_facing_remarks || "No student remarks logged."
+            };
+        },
     },
     watch: {
         '$route.query.q'(newVal, oldVal) {
@@ -494,7 +555,7 @@ const AdminManageDrives = {
     mounted() {
         if (this.$route.query.q) {
             this.searchQuery = this.$route.query.q;
-            this.selectedStatuses = ['Active', 'Pending', 'Application Closed', 'Rejected'];
+            this.selectedStatuses = ['Active', 'Pending', 'Application Closed', 'Closed', 'Rejected'];
         }
         this.fetchDrives(); 
         
@@ -515,6 +576,17 @@ const AdminManageDrives = {
                 this.cancelInterviewModal = new bootstrap.Modal(cancelModalEl);
             }
         });
+
+        // Inject styles dynamically to avoid Vue template compilation errors
+        if (!document.getElementById('remark-overlay-styles')) {
+            const style = document.createElement('style');
+            style.id = 'remark-overlay-styles';
+            style.innerHTML = `
+            .remark-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); display: flex; justify-content: center; align-items: center; z-index: 1070; }
+            .remark-box { width: 90%; max-width: 450px; }
+            `;
+            document.head.appendChild(style);
+        }
     }
 };
 

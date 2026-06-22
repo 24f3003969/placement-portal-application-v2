@@ -426,7 +426,7 @@ def generate_dummy_data(user_datastore):
                 rejection_type = random.choices(['direct', 'failed_round', 'declined_offer'], weights=[50, 35, 15])[0]
                 
                 if rejection_type == 'direct':
-                    app.rejection_reason = "Resume did not match requirements."
+                    app.internal_rejection_remark = "Resume did not match requirements."
                 elif rejection_type == 'failed_round':
                     failed_round = random.randint(1, total_rounds)
                     for r in range(failed_round):
@@ -440,7 +440,7 @@ def generate_dummy_data(user_datastore):
                             location_or_link=f"https://meet.google.com/{fake.lexify(text='???-????-???')}", status=int_status, result=int_result, remarks="Failed to answer key technical questions." if is_fail_round else fake.sentence()
                         )
                         db.session.add(interview)
-                    app.rejection_reason = f"Failed in {drive.InterviewRounds[failed_round-1] if failed_round-1 < len(drive.InterviewRounds) else f'Round {failed_round}'}."
+                    app.internal_rejection_remark = f"Failed in {drive.InterviewRounds[failed_round-1] if failed_round-1 < len(drive.InterviewRounds) else f'Round {failed_round}'}."
                 elif rejection_type == 'declined_offer':
                     for r in range(total_rounds):
                         round_name = drive.InterviewRounds[r] if r < len(drive.InterviewRounds) else f"Round {r+1}"
@@ -455,7 +455,7 @@ def generate_dummy_data(user_datastore):
                         joining_date=(now + timedelta(days=60)).date(), offer_status='Rejected', message="Congratulations on your selection!"
                     )
                     db.session.add(placement)
-                    app.rejection_reason = "Offer rejected by student."
+                    app.internal_rejection_remark = "Offer rejected by student."
     
     db.session.commit()
 

@@ -1,5 +1,6 @@
 import StudentProfile from "../components/student_profile.js";
 import CompanyProfile from "../components/company_profile.js";
+import RejectionModal from "../components/rejection_modal.js";
 import { formatDateTime } from "../utils/formatDateTime.js";
 
 const AdminDashboard={
@@ -252,28 +253,10 @@ const AdminDashboard={
             </div>
         </div>
 
-        <!-- Drive Rejection Modal -->
-        <div class="modal fade" id="driveRejectModal" tabindex="-1">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content" v-if="selectedItem">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Reject Drive: {{ selectedItem.JobTitle }}</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <label class="form-label">Rejection Remarks (Required)</label>
-                        <textarea v-model="rejectionRemarks" class="form-control" rows="3"></textarea>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="button" class="btn btn-danger" @click="rejectSelectedDrive" :disabled="!rejectionRemarks">Confirm Rejection</button>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <rejection-modal ref="rejectionModal" type="drive" @confirm="confirmAdminRejectDrive"></rejection-modal>
     </div>
     `,
-    components: { StudentProfile, CompanyProfile },
+    components: { StudentProfile, CompanyProfile, RejectionModal },
     data(){
         return{
             loading: true,
@@ -282,8 +265,6 @@ const AdminDashboard={
             selectedItem: null,
             profileModal: null,
             funnelChart: null,
-            driveRejectionModal: null,
-            rejectionRemarks: '',
             workModeChart: null,
             typeChart: null,
             departments: [],
@@ -419,7 +400,6 @@ const AdminDashboard={
 
             if (res.ok) {
                 alert(`Drive status updated to ${status}.`);
-                if (this.driveRejectionModal) this.driveRejectionModal.hide();
                 this.fetchDashboardData(); // Refresh
             } else {
                 alert('Failed to update drive status.');
@@ -491,8 +471,20 @@ const AdminDashboard={
         },
         openDriveRejectModal(drive) {
             this.selectedItem = drive;
-            this.rejectionRemarks = '';
-            this.driveRejectionModal.show();
+            if (this.$refs.rejectionModal) {
+                this.$refs.rejectionModal.show();
+            }
+        },
+        confirmAdminRejectDrive({ rejection_reason, note_for_student }) {
+            if (!this.selectedItem) return;
+            let finalRemarks = rejection_reason;
+            if (note_for_student && note_for_student.trim()) {
+                finalRemarks += "\nNote: " + note_for_student;
+            }
+            this.updateDriveStatus(this.selectedItem.DriveID, 'Rejected', finalRemarks);
+            if (this.$refs.rejectionModal) {
+                this.$refs.rejectionModal.hide();
+            }
         },
         viewProfile(item) {
             this.selectedItem = item;
@@ -503,13 +495,6 @@ const AdminDashboard={
         },
         goToStudentsBySkill(skillName) {
             this.$router.push({ path: '/manage_users', query: { tab: 'students', skill: skillName } });
-        },
-        rejectSelectedDrive() {
-            if (!this.rejectionRemarks) {
-                alert('Rejection remarks are required.');
-                return;
-            }
-            this.updateDriveStatus(this.selectedItem.DriveID, 'Rejected', this.rejectionRemarks);
         }
     },
     watch: {
@@ -526,7 +511,6 @@ const AdminDashboard={
     },
     async mounted() {
         this.profileModal = new bootstrap.Modal(document.getElementById('profileModal'));
-        this.driveRejectionModal = new bootstrap.Modal(document.getElementById('driveRejectModal'));
         document.getElementById('profileModal').addEventListener('hidden.bs.modal', () => {
             this.selectedItem = null;
         });

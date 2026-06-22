@@ -1,5 +1,6 @@
 import { formatDateTime, getMinDateTime } from '../utils/formatDateTime.js';
 import StudentProfile from '../components/student_profile.js';
+import RejectionModal from '../components/rejection_modal.js';
 const InterviewRoundView = {
     props: ['interviews', 'roundNumber', 'totalRounds', 'driveTitle', 'allDriveInterviews'],
     template: `
@@ -467,37 +468,7 @@ const CompanyInterviews = {
         </div>
 
         <!-- Rejection Reason Modal -->
-        <div class="modal fade" id="rejectionReasonModal" tabindex="-1">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-                    <div class="modal-header"><h5 class="modal-title">Reject Application</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Rejection Reason Category (Optional)</label>
-                            <select v-model="rejectionCategory" class="form-select mb-2">
-                                <option value="">Select standard category...</option>
-                                <option value="Lacks required technical skills">Lacks required technical skills</option>
-                                <option value="Does not meet CGPA criteria">Does not meet CGPA criteria</option>
-                                <option value="Resume mismatch / Incomplete application">Resume mismatch / Incomplete application</option>
-                                <option value="Failed live interviewing round steps">Failed live interviewing round steps</option>
-                                <option value="Candidate was unresponsive or no-show">Candidate was unresponsive or no-show</option>
-                                <option value="Position closed">Position closed</option>
-                                <option value="Other">Other (custom reason)</option>
-                            </select>
-                        </div>
-                        <div class="mb-3" v-if="rejectionCategory === 'Other' || !rejectionCategory">
-                            <label class="form-label fw-bold">Custom Rejection Reason</label>
-                            <textarea v-model="rejectionData.reason" class="form-control" rows="3"></textarea>
-                        </div>
-                        <div class="mb-3"><label class="form-label">Note for Student (Optional)</label><textarea v-model="rejectionData.note" class="form-control" rows="2"></textarea></div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="button" class="btn btn-danger" @click="confirmRejectApplication" :disabled="!rejectionCategory ? !rejectionData.reason : (rejectionCategory === 'Other' && !rejectionData.reason)">Confirm Rejection</button>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <rejection-modal ref="rejectionModal" @confirm="confirmRejectApplication"></rejection-modal>
 
         <!-- Reschedule / Cancel Modal -->
         <div class="modal fade" id="rescheduleModal" tabindex="-1">
@@ -554,7 +525,8 @@ const CompanyInterviews = {
     `,
     components: {
         'interview-round-view': InterviewRoundView,
-        'student-profile': StudentProfile
+        'student-profile': StudentProfile,
+        'rejection-modal': RejectionModal
     },
     data() {
         return {
@@ -741,10 +713,8 @@ const CompanyInterviews = {
             }
         },
         openRejectionModal() {
-            this.rejectionCategory = '';
-            this.rejectionData = { reason: '', note: '' };
             this.updateStatusModal.hide();
-            this.rejectionReasonModal.show();
+            this.$refs.rejectionModal.show();
         },
         openRescheduleModal(interview) {
             this.selectedApplicationForUpdate = interview;
@@ -791,21 +761,19 @@ const CompanyInterviews = {
                 console.error(err); alert("An error occurred while updating the interview.");
             }
         },
-        async confirmRejectApplication() {
-            const finalReason = this.rejectionCategory === 'Other' || !this.rejectionCategory
-                ? this.rejectionData.reason
-                : this.rejectionCategory;
-
-            if (!finalReason) return alert('Rejection reason is mandatory.');
-
+        async confirmRejectApplication(payload) {
             const res = await fetch(`/api/view_application/${this.selectedApplicationForUpdate.application_id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'Authentication-Token': localStorage.getItem('token') },
-                body: JSON.stringify({ status: 'Rejected', rejection_reason: finalReason, note_for_student: this.rejectionData.note })
+                body: JSON.stringify({
+                    status: 'Rejected',
+                    rejection_reason: payload.rejection_reason,
+                    note_for_student: payload.note_for_student
+                })
             });
             if (res.ok) {
                 alert('Application has been rejected.');
-                this.rejectionReasonModal.hide();
+                this.$refs.rejectionModal.hide();
                 this.fetchInterviews();
             } else {
                 const err = await res.json();
@@ -951,7 +919,6 @@ const CompanyInterviews = {
     },
     mounted() {
         this.updateStatusModal = new bootstrap.Modal(document.getElementById('updateStatusModal'));
-        this.rejectionReasonModal = new bootstrap.Modal(document.getElementById('rejectionReasonModal'));
         this.rescheduleModal = new bootstrap.Modal(document.getElementById('rescheduleModal'));
 
         this.quickProfileModal = new bootstrap.Modal(document.getElementById('quickProfileModal'));

@@ -341,10 +341,10 @@ const StudentDashboard = {
             return this.drives.filter(drive => {
                 if (appliedDriveIds.includes(drive.DriveID)) return false; 
                 if (!drive.ApplyDeadline) return false;
-                
+                if(drive.Status !== 'Active') return false;
                 const today = new Date();
                 today.setHours(0,0,0,0);
-                const deadline = new Date(drive.ApplyDeadline + 'T00:00:00');
+                const deadline = new Date(drive.ApplyDeadline);
                 if (deadline < today || deadline > in48Hours) return false; 
 
                 const driveMinCGPA = parseFloat(drive.min_cgpa) || 0;

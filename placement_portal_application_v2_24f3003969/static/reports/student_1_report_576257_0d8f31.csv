@@ -1,0 +1,23 @@
+STUDENT PLACEMENT REPORT
+
+Generated On,"22-Jun-2026, 06:35 PM"
+Student Roll No,24f3003456
+Student Name,Prachi
+Department,Computer Science
+CGPA,8.0
+
+--- REPORT INSIGHTS ---
+Total Applications,1
+Interviews Scheduled,1
+Offers Received,0
+Application Statuses,{'Rejected': 1}
+
+
+--- APPLICATION HISTORY ---
+Sr. No.,Company Name,Drive Job Title,Type,Applied On,Current Status,Compensation,Rejection Reason,Rejection Revoke Note,Last Updated
+1,Google,SDE,Job,22-Jun-2026,Rejected,12 LPA,Does not meet CGPA criteria,dsgdfgfds,"22-Jun-2026, 06:34 PM"
+
+
+--- DETAILED INTERVIEW HISTORY ---
+Sr. No.,Company Name,Job Title,Round No.,Round Name,Date & Time,Location / Link,Status,Result,Feedback for Student
+1,Google,SDE,1,Technical,"22-Jun-2026, 05:50 PM",fds,completed,failed,dsgdfgfds

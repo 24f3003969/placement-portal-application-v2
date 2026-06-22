@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Monthly Admin Report - {{ data.report_month }}</title>
+    <title>Monthly Admin Report - June 2026</title>
     <style>
         body { 
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -236,10 +236,10 @@
         <div class="header">
             <div class="header-title">
                 <h1>Monthly Placement Report</h1>
-                <p>{{ data.report_month }}</p>
+                <p>June 2026</p>
             </div>
             <div class="header-meta">
-                Generated: {{ data.generated_at }}<br>
+                Generated: 2026-06-22 15:37<br>
                 Recipient: Administrator
             </div>
         </div>
@@ -247,31 +247,27 @@
         <!-- Metric Dashboard -->
         <div class="metrics-grid">
             <div class="metric-card primary">
-                <div class="metric-value">{{ data.placements|length }}</div>
+                <div class="metric-value">0</div>
                 <div class="metric-label">Total Placements</div>
             </div>
             <div class="metric-card success">
                 <div class="metric-value">
-                    {% if data.highest_salary > 0 %}
-                        {{ data.highest_salary }} LPA
-                    {% else %}
+                    
                         N/A
-                    {% endif %}
+                    
                 </div>
                 <div class="metric-label">Highest Job Package</div>
             </div>
             <div class="metric-card primary">
                 <div class="metric-value">
-                    {% if data.avg_salary > 0 %}
-                        {{ data.avg_salary }} LPA
-                    {% else %}
+                    
                         N/A
-                    {% endif %}
+                    
                 </div>
                 <div class="metric-label">Avg Job Package</div>
             </div>
             <div class="metric-card warning">
-                <div class="metric-value">{{ data.new_drives_with_stats|length }}</div>
+                <div class="metric-value">2</div>
                 <div class="metric-label">New Drives Posted</div>
             </div>
         </div>
@@ -279,30 +275,26 @@
         <div class="metrics-grid" style="margin-top: -1.25rem;">
             <div class="metric-card success">
                 <div class="metric-value">
-                    {% if data.highest_stipend > 0 %}
-                        ₹{{ data.highest_stipend|int }}/mo
-                    {% else %}
+                    
                         N/A
-                    {% endif %}
+                    
                 </div>
                 <div class="metric-label">Highest Stipend</div>
             </div>
             <div class="metric-card primary">
                 <div class="metric-value">
-                    {% if data.avg_stipend > 0 %}
-                        ₹{{ data.avg_stipend|int }}/mo
-                    {% else %}
+                    
                         N/A
-                    {% endif %}
+                    
                 </div>
                 <div class="metric-label">Avg Stipend</div>
             </div>
             <div class="metric-card warning" style="border-left: 4px solid #ef4444;">
-                <div class="metric-value" style="color: #ef4444;">{{ data.total_rejections }}</div>
+                <div class="metric-value" style="color: #ef4444;">0</div>
                 <div class="metric-label">Total Rejections</div>
             </div>
             <div class="metric-card primary" style="border-left: 4px solid #8b5cf6;">
-                <div class="metric-value" style="color: #8b5cf6;">{{ data.total_interviews }}</div>
+                <div class="metric-value" style="color: #8b5cf6;">4</div>
                 <div class="metric-label">Interviews Conducted</div>
             </div>
         </div>
@@ -312,38 +304,25 @@
             <div>
                 <div class="insight-box">
                     <h3>Placements by Department</h3>
-                    {% if data.placements_by_dept and data.placements|length > 0 %}
-                        <ul class="dept-list">
-                            {% for dept, count in data.placements_by_dept.items() %}
-                            <li class="dept-item">
-                                <span class="dept-name">{{ dept }}</span>
-                                <span class="dept-badge">{{ count }} hire{{ 's' if count > 1 else '' }}</span>
-                            </li>
-                            {% endfor %}
-                        </ul>
-                    {% else %}
+                    
                         <p class="no-data" style="padding: 1rem 0;">No placement records to categorize this month.</p>
-                    {% endif %}
+                    
                 </div>
             </div>
             <div>
                 <div class="insight-box">
                     <h3>Top Hiring Companies</h3>
                     <ol class="ranking-list">
-                        {% for company, count in data.top_hirers %}
-                            <li><strong>{{ company }}</strong> ({{ count }} hire{{ 's' if count > 1 else '' }})</li>
-                        {% else %}
+                        
                             <li style="list-style: none; margin-left: -1rem;" class="no-data">No hires recorded this month.</li>
-                        {% endfor %}
+                        
                     </ol>
 
                     <h3 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Top Placed Roles</h3>
                     <ol class="ranking-list">
-                        {% for role, count in data.top_roles %}
-                            <li><strong>{{ role }}</strong> ({{ count }} hire{{ 's' if count > 1 else '' }})</li>
-                        {% else %}
+                        
                             <li style="list-style: none; margin-left: -1rem;" class="no-data">No data.</li>
-                        {% endfor %}
+                        
                     </ol>
                 </div>
             </div>
@@ -364,30 +343,11 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for placement in data.placements %}
-                    <tr>
-                        <td><strong>{{ placement.student.name }}</strong></td>
-                        <td>{{ placement.drive.company_name }}</td>
-                        <td>{{ placement.drive.JobTitle }}</td>
-                        <td><span class="badge {{ 'badge-success' if placement.drive.Type == 'Job' else 'badge-primary' }}">{{ placement.drive.Type }}</span></td>
-                        <td>
-                            {% if placement.drive.Salary %}
-                                {% if placement.drive.Type == 'Job' %}
-                                    {{ placement.drive.Salary }} LPA
-                                {% else %}
-                                    ₹{{ placement.drive.Salary }}/mo
-                                {% endif %}
-                            {% else %}
-                                N/A
-                            {% endif %}
-                        </td>
-                        <td>{{ placement.updated_time.strftime('%Y-%m-%d') }}</td>
-                    </tr>
-                    {% else %}
+                    
                     <tr>
                         <td colspan="6" class="no-data">There were no new placements recorded this month.</td>
                     </tr>
-                    {% endfor %}
+                    
                 </tbody>
             </table>
         </div>
@@ -407,20 +367,25 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for item in data.new_drives_with_stats %}
+                    
                     <tr>
-                        <td><strong>{{ item.drive.company_name }}</strong></td>
-                        <td>{{ item.drive.JobTitle }}</td>
-                        <td><span class="badge {{ 'badge-success' if item.drive.Type == 'Job' else 'badge-primary' }}">{{ item.drive.Type }}</span></td>
-                        <td class="text-center">{{ item.stats.applicants }}</td>
-                        <td class="text-center">{{ item.stats.shortlisted }}</td>
-                        <td class="text-center">{{ item.stats.hired }}</td>
+                        <td><strong>Google</strong></td>
+                        <td>SDE</td>
+                        <td><span class="badge badge-success">Job</span></td>
+                        <td class="text-center">1</td>
+                        <td class="text-center">0</td>
+                        <td class="text-center">0</td>
                     </tr>
-                    {% else %}
+                    
                     <tr>
-                        <td colspan="6" class="no-data">No new drives were posted this month.</td>
+                        <td><strong>Google</strong></td>
+                        <td>SDE</td>
+                        <td><span class="badge badge-primary">Internship</span></td>
+                        <td class="text-center">1</td>
+                        <td class="text-center">0</td>
+                        <td class="text-center">0</td>
                     </tr>
-                    {% endfor %}
+                    
                 </tbody>
             </table>
         </div>
@@ -430,7 +395,7 @@
         <div class="two-col-grid">
             <div>
                 <div class="insight-box" style="background-color: #ffffff; padding: 0; border: none; height: auto;">
-                    <h3 style="color: #ef4444; border-bottom: 2px solid #fee2e2; padding-bottom: 0.5rem; margin-bottom: 0.75rem;">Disabled Students ({{ data.disabled_students|length }})</h3>
+                    <h3 style="color: #ef4444; border-bottom: 2px solid #fee2e2; padding-bottom: 0.5rem; margin-bottom: 0.75rem;">Disabled Students (0)</h3>
                     <div class="table-responsive" style="margin-bottom: 0;">
                         <table>
                             <thead>
@@ -441,20 +406,11 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for student in data.disabled_students %}
-                                <tr>
-                                    <td>
-                                        <strong>{{ student.name }}</strong><br>
-                                        <span style="font-size: 0.75rem; color: #64748b;">{{ student.roll_no }}</span>
-                                    </td>
-                                    <td><span class="badge badge-danger" style="white-space: normal;">{{ student.reason }}</span></td>
-                                    <td style="font-size: 0.75rem; color: #64748b; white-space: nowrap;">{{ student.timestamp }}</td>
-                                </tr>
-                                {% else %}
+                                
                                 <tr>
                                     <td colspan="3" class="no-data" style="padding: 1.5rem;">No student accounts were disabled.</td>
                                 </tr>
-                                {% endfor %}
+                                
                             </tbody>
                         </table>
                     </div>
@@ -462,7 +418,7 @@
             </div>
             <div>
                 <div class="insight-box" style="background-color: #ffffff; padding: 0; border: none; height: auto;">
-                    <h3 style="color: #ef4444; border-bottom: 2px solid #fee2e2; padding-bottom: 0.5rem; margin-bottom: 0.75rem;">Disabled Companies ({{ data.disabled_companies|length }})</h3>
+                    <h3 style="color: #ef4444; border-bottom: 2px solid #fee2e2; padding-bottom: 0.5rem; margin-bottom: 0.75rem;">Disabled Companies (0)</h3>
                     <div class="table-responsive" style="margin-bottom: 0;">
                         <table>
                             <thead>
@@ -473,20 +429,11 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for company in data.disabled_companies %}
-                                <tr>
-                                    <td>
-                                        <strong>{{ company.company_name }}</strong><br>
-                                        <span style="font-size: 0.75rem; color: #64748b;">{{ company.email }}</span>
-                                    </td>
-                                    <td><span class="badge badge-danger" style="white-space: normal;">{{ company.reason }}</span></td>
-                                    <td style="font-size: 0.75rem; color: #64748b; white-space: nowrap;">{{ company.timestamp }}</td>
-                                </tr>
-                                {% else %}
+                                
                                 <tr>
                                     <td colspan="3" class="no-data" style="padding: 1.5rem;">No company accounts were disabled.</td>
                                 </tr>
-                                {% endfor %}
+                                
                             </tbody>
                         </table>
                     </div>

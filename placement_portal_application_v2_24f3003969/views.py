@@ -3,8 +3,8 @@ from flask_security import auth_required, current_user,login_user, verify_passwo
 from flask_security.utils import hash_password
 from sqlalchemy import or_
 from application.extensions import db
-from application.models import Application, CompanyProfile, PlacementDrives,StudentProfile, Department
-from application.tasks import generate_student_report_task, generate_admin_monthly_report_task, generate_daily_reminders_task, cleanup_old_files_task, generate_offer_letter_task
+from application.models import CompanyProfile,StudentProfile, Department
+from application.tasks import generate_student_report_task
 from application.mail import send_email
 from celery.result import AsyncResult
 
@@ -79,6 +79,98 @@ def create_view(app,user_datastore: SQLAlchemyUserDatastore):
             return jsonify(response_data), 200
         print(has_profile)
         return jsonify({"message":"Login successful","token":user.get_auth_token(),"role":role,"has_profile":has_profile,"userName":display_name}),200
+
+    @app.route('/api/forgot_password', methods=['POST'])
+    def forgot_password():
+        import secrets
+        from application.models import User, PasswordResetToken
+        from api.shared import get_ist_now
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({"message": "Invalid request"}), 400
+            
+        email = data.get('email')
+        if not email:
+            return jsonify({"message": "Email is required"}), 400
+            
+        user = user_datastore.find_user(email=email)
+        success_msg = "reset password link is sent to the provided email if it is a registered one"
+        
+        if user:
+            # Generate a 5-minute one-time reset token
+            token = secrets.token_urlsafe(32)
+            reset_token = PasswordResetToken(
+                token=token,
+                user_id=user.id,
+                created_at=get_ist_now(),
+                used=False
+            )
+            db.session.add(reset_token)
+            db.session.commit()
+            
+            # Construct link (using standard Vue hash routing)
+            reset_link = f"{request.host_url}#/reset_password?token={token}"
+            
+            subject = "Password Reset Confirmation"
+            message_html = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+                <h2 style="color: #333; text-align: center;">Reset Your Password</h2>
+                <p>Hello,</p>
+                <p>We received a request to reset the password for your account. Please click the link below to set a new password:</p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="{reset_link}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">Reset Password</a>
+                </div>
+                <p>Please note that this link is <strong>valid for 5 minutes only</strong> and <strong>can only be used once</strong>.</p>
+                <p>If you did not request this, please ignore this email.</p>
+                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+                <p style="font-size: 12px; color: #777; text-align: center;">Placement Portal Application</p>
+            </div>
+            """
+            send_email(to_address=user.email, subject=subject, message=message_html, content="html")
+            
+        return jsonify({"message": success_msg}), 200
+
+    @app.route('/api/reset_password', methods=['POST'])
+    def reset_password():
+        from application.models import User, PasswordResetToken
+        from api.shared import get_ist_now
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({"message": "Invalid request"}), 400
+            
+        token = data.get('token')
+        password = data.get('password')
+        
+        if not token or not password:
+            return jsonify({"message": "Token and password are required"}), 400
+            
+        if len(password) < 6:
+            return jsonify({"message": "Password must be at least 6 characters long"}), 400
+            
+        token_record = PasswordResetToken.query.filter_by(token=token).first()
+        if not token_record:
+            return jsonify({"message": "Invalid or expired token."}), 400
+            
+        if token_record.used:
+            return jsonify({"message": "Token has already been used."}), 400
+            
+        # Check if expired (5 minutes = 300 seconds)
+        now = get_ist_now()
+        elapsed_seconds = (now - token_record.created_at).total_seconds()
+        if elapsed_seconds > 300:
+            return jsonify({"message": "Token has expired."}), 400
+            
+        user = user_datastore.find_user(id=token_record.user_id)
+        if not user:
+            return jsonify({"message": "User not found."}), 404
+            
+        user.password = hash_password(password)
+        token_record.used = True
+        db.session.commit()
+        
+        return jsonify({"message": "Password has been successfully reset."}), 200
     
     @app.route('/api/logout', methods=['POST'])
     @auth_required('session','token')

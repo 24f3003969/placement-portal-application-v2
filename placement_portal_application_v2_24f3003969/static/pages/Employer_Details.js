@@ -56,9 +56,9 @@ const EmployerDetails={
                                 <label>Official Address</label>
                             </div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-12">
                             <div class="form-floating mb-3">
-                                <input v-model="desc" type="text" class="form-control" placeholder="Company Description" required/>
+                                <textarea v-model="desc" class="form-control" placeholder="Company Description" required></textarea>
                                 <label>Company Description</label>
                             </div>
                         </div>

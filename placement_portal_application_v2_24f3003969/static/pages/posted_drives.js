@@ -7,7 +7,7 @@ const PostedDrives={
     template:`
     <div v-if="view==='drives'" class="container-fluid min-vh-100">
         <div class="row">
-            <div class="col-md-2">
+            <div class="col-md-2 mb-4">
                 <div class="card border-0 shadow-sm p-4 rounded-4 bg-light" style="top:20px;">
                     <h5 class="fw-bold">Filters</h5>
                     <div class="filter-section mt-3">
@@ -24,7 +24,8 @@ const PostedDrives={
                             <select class="form-select form-select-sm border-0 shadow-sm py-2 px-3" v-model="selectedStatus">
                                 <option value="">All Statuses</option>
                                 <option value="Active">Active</option>
-                                <option value="Application Closed">Closed</option>
+                                <option value="Application Closed">Applications Closed</option>
+                                <option value="Closed">Closed</option>
                                 <option value="Rejected">Rejected</option>
                                 <option value="Pending">Pending</option>
                                 <option value="Suspended">Suspended</option>
@@ -75,7 +76,8 @@ const PostedDrives={
                             :isDetailview="false"
                             :current-user-role="userRole"
                             @view="viewDrive"
-                            @close="closeDrive"
+                            @close-applications="closeApplications"
+                            @close-drive="closeDrive"
                             @viewNote="handleViewNote"
                              />
                     </div>
@@ -125,6 +127,12 @@ const PostedDrives={
             :drive="currentForm"
             @back="view='drives' ; this.fetchDrives ; this.fetchTopDrives"
             :user-role="userRole"
+        />
+        <drive-detail-view
+            v-if="view==='drive_details'"
+            :drive="currentForm"
+            mode="details_only"
+            @back="view='drives'"
         />
         <drive-details-form
             v-if="view==='create'"
@@ -224,7 +232,11 @@ const PostedDrives={
         },
         viewDrive(drive) {
             this.currentForm = drive;
-            this.view = 'drives_stats';
+            if (drive.Status === 'Pending' || drive.Status === 'Rejected') {
+                this.view = 'drive_details';
+            } else {
+                this.view = 'drives_stats';
+            }
         },
         handleViewNote(drive) {
             if (drive && typeof drive === 'object') {
@@ -244,21 +256,46 @@ const PostedDrives={
                 }
             }
         },
-        async closeDrive(driveId) {
-            if (!confirm('Are you sure you want to close this drive?')) return;
+        async closeApplications(driveId) {
+            if (!confirm('Are you sure you want to close applications for this drive? This will stop new student applications but keep existing applications and interviews active.')) return;
             const response = await fetch(`/api/drive_application/${driveId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authentication-Token': localStorage.getItem('token')
                 },
+                body: JSON.stringify({ action: 'close_applications' })
             });
             if (response.ok) {
-                alert("Drive Closed successfully");
-                const drive = this.filteredResources.find(d => d.DriveID === driveId);
+                alert("Applications closed successfully.");
+                const drive = this.allResources.find(d => d.DriveID === driveId);
                 if (drive) {
                     drive.Status = 'Application Closed';
                 }
+                this.fetchDrives();
+                this.fetchTopDrives();
+            } else {
+                alert("Failed to close applications.");
+            }
+        },
+        async closeDrive(driveId) {
+            if (!confirm('Are you sure you want to finally close this drive? This will cancel all remaining/uncompleted interviews and reject all remaining applications.')) return;
+            const response = await fetch(`/api/drive_application/${driveId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authentication-Token': localStorage.getItem('token')
+                },
+                body: JSON.stringify({ action: 'close_drive' })
+            });
+            if (response.ok) {
+                alert("Drive closed successfully.");
+                const drive = this.allResources.find(d => d.DriveID === driveId);
+                if (drive) {
+                    drive.Status = 'Closed';
+                }
+                this.fetchDrives();
+                this.fetchTopDrives();
             } else {
                 alert("Failed to close drive.");
             }

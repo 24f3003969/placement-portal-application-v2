@@ -1,5 +1,6 @@
 import { formatDateTime, getMinDate, getMinDateTime } from '../utils/formatDateTime.js';
 import StudentProfile from '../components/student_profile.js';
+import RejectionModal from '../components/rejection_modal.js';
 
 const GettedApplications = {
     template: `
@@ -327,7 +328,10 @@ const GettedApplications = {
                             <h5 class="fw-bold mb-0 text-center py-3 text-muted">No Candidates Selected Yet</h5>
                         </div>
                         <div v-else>
-                            <h5 class="fw-bold mb-2 text-dark border-bottom pb-1 small"><i class="bi bi-safe2-fill me-2 text-success"></i>Selected Candidates (Offer Desk)</h5>
+                            <div class="d-flex justify-content-between align-items-center mb-2 border-bottom pb-1">
+                                <h5 class="fw-bold mb-0 text-dark small"><i class="bi bi-safe2-fill me-2 text-success"></i>Selected Candidates (Offer Desk)</h5>
+                                <button v-if="unsentSelectedCandidates.length > 0" @click="openBulkSendOfferModal" class="btn btn-success btn-sm fw-bold px-3 py-1 shadow-sm" style="font-size: 0.75rem;"><i class="bi bi-send-fill me-1"></i>Bulk Send Offers ({{ unsentSelectedCandidates.length }})</button>
+                            </div>
                             <table class="table table-sm table-hover align-middle mb-0 small">
                                 <thead class="table-light">
                                     <tr>
@@ -461,13 +465,18 @@ const GettedApplications = {
                                             </div>
                                         </td>
                                         <td><span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-0.5"><i class="bi bi-x-octagon me-1"></i>Rejected</span></td>
-                                        <td><div class="p-1 bg-light border rounded small">{{ app.rejection_reason || 'No failure log reason entered.' }}</div></td>
+                                        <td>
+                                            <div class="p-1 bg-light border rounded small">{{ app.rejection_reason || 'No failure log reason entered.' }}</div>
+                                            <div v-if="app.remark" class="p-1 bg-info-subtle border border-info-subtle rounded small text-dark mt-1" style="font-size: 0.75rem;">
+                                                <i class="bi bi-eye-fill text-info me-1"></i><strong>Remark for Student:</strong> {{ app.remark}}
+                                            </div>
+                                        </td>
                                         <td class="text-center">
                                             <span v-if="app.status === 'Suspended'" class="badge bg-warning text-dark px-2 py-1"><i class="bi bi-pause-circle-fill me-1"></i>Suspended</span>
                                             <template v-else>
                                                 <span v-if="app.student_is_hired" class="badge bg-secondary text-white px-2 py-1" title="This candidate is already hired for another job."><i class="bi bi-lock-fill me-1"></i> Locked (Hired)</span>
                                                 <span v-else-if="app.rejection_reason === 'Offer rejected by student.' || app.offer_status === 'Rejected'" class="badge bg-secondary text-white px-2 py-1" title="This candidate officially declined the offer letter."><i class="bi bi-lock-fill me-1"></i> Locked (Declined)</span>
-                                                <button v-else @click="openRestoreAuditOverrideModal(app)" class="btn btn-outline-warning text-dark btn-sm py-0.5 fw-bold" style="font-size: 0.75rem;"><i class="bi bi-arrow-counterclockwise me-1"></i> Restore</button>
+                                                <button v-else-if="app.drive.Status !== 'Closed'" @click="openRestoreAuditOverrideModal(app)" class="btn btn-outline-warning text-dark btn-sm py-0.5 fw-bold" style="font-size: 0.75rem;"><i class="bi bi-arrow-counterclockwise me-1"></i> Restore</button>
                                             </template>
                                         </td>
                                     </tr>
@@ -511,7 +520,7 @@ const GettedApplications = {
                             <button class="btn btn-success px-4 btn-sm fw-bold" @click="shortlistApplication(selectedApplication.id)">Shortlist Candidate</button>
                         </template>
 
-                        <template v-else-if="(selectedApplication.status === 'Shortlisted' || selectedApplication.status === 'Interview' || selectedApplication.status === 'Interviewing') && (selectedApplication.interview_datetime === 'N/A' || selectedApplication.interview_datetime === 'Not Scheduled' || !selectedApplication.interview_datetime)">
+                        <template v-else-if="(selectedApplication.status === 'Shortlisted' || selectedApplication.status === 'Interviewing') && (selectedApplication.interview_datetime === 'N/A' || selectedApplication.interview_datetime === 'Not Scheduled' || !selectedApplication.interview_datetime)">
                             <button class="btn btn-danger px-4 btn-sm fw-bold" @click="openRejectionModalFromDetails">Reject Candidate From Pipeline</button>
                             <button class="btn btn-success px-4 btn-sm fw-bold" @click="openScheduleSection"><i class="bi bi-calendar-check me-1"></i>Schedule Interview Round</button>
                         </template>
@@ -564,39 +573,7 @@ const GettedApplications = {
         
         <!-- Other standard modals (Reject, Send Offer, Restore Audit) preserved internally as coded in previous response exactly -> omitting large HTML blocks solely for character brevity but they remain identical -->
         <!-- REJECTION INPUT MODAL -->
-        <div class="modal fade" id="rejectionReasonModal" tabindex="-1">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content border-0 shadow-lg">
-                    <div class="modal-header bg-danger text-white border-0">
-                        <h5 class="modal-title fw-bold"><i class="bi bi-slash-circle me-2"></i>Reject Candidate</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body p-3 text-start">
-                        <div class="mb-3">
-                            <label class="form-label fw-bold small text-muted">Rejection Reason Category (Optional)</label>
-                            <select v-model="rejectionCategory" class="form-select mb-2">
-                                <option value="">Select standard category...</option>
-                                <option value="Lacks required technical skills">Lacks required technical skills</option>
-                                <option value="Does not meet CGPA criteria">Does not meet CGPA criteria</option>
-                                <option value="Resume mismatch / Incomplete application">Resume mismatch / Incomplete application</option>
-                                <option value="Failed live interviewing round steps">Failed live interviewing round steps</option>
-                                <option value="Candidate was unresponsive or no-show">Candidate was unresponsive or no-show</option>
-                                <option value="Position closed">Position closed</option>
-                                <option value="Other">Other (custom reason)</option>
-                            </select>
-                        </div>
-                        <div class="mb-3" v-if="rejectionCategory === 'Other' || !rejectionCategory">
-                            <label class="form-label fw-bold small text-muted">Custom Rejection Reason</label>
-                            <textarea v-model="rejectionData.reason" class="form-control font-monospace" rows="3" placeholder="Enter custom reason details... (Optional)"></textarea>
-                        </div>
-                    </div>
-                    <div class="modal-footer bg-light border-0">
-                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Dismiss</button>
-                        <button type="button" class="btn btn-danger btn-sm px-3 fw-bold" @click="confirmRejectApplication">Confirm Reject</button>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <rejection-modal ref="rejectionModal" @confirm="confirmRejectApplication"></rejection-modal>
 
         <!-- CONTRACT COMPILATION MODAL -->
         <div class="modal fade" id="sendOfferModal" tabindex="-1">
@@ -628,6 +605,42 @@ const GettedApplications = {
                         <button type="button" class="btn btn-success btn-sm px-3 fw-bold shadow-sm" @click="sendOffer" :disabled="!offerData.expiry_date || !offerData.joining_date || offerGenerationLoading">
                             <span v-if="offerGenerationLoading" class="spinner-border spinner-border-sm me-1" role="status"></span>
                             {{ offerGenerationLoading ? 'Executing Task...' : 'Generate & Dispatch Offer' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- BULK CONTRACT COMPILATION MODAL -->
+        <div class="modal fade" id="bulkOfferModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow-lg">
+                    <div class="modal-header bg-success text-white border-0">
+                        <h5 class="modal-title fw-bold"><i class="bi bi-file-earmark-post-fill me-2"></i>Configure Bulk Contracts</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-3 text-start">
+                        <div class="alert alert-light p-2 small border mb-3">Compiling legal employment contract assignments targeting: <strong class="text-success">{{ unsentSelectedCandidates.length }} selected candidate(s)</strong></div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small">Offer Acceptance System Expiry Date</label>
+                                <input type="date" v-model="bulkOfferData.expiry_date" :min="getMinDate()" class="form-control form-control-sm" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small">Anticipated Onboarding Joining Date</label>
+                                <input type="date" v-model="bulkOfferData.joining_date" :min="getMinDate()" class="form-control form-control-sm" required>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-bold small">Optional Offer Message / Notes</label>
+                                <textarea v-model="bulkOfferData.message" class="form-control font-monospace" rows="3" placeholder="Additional notes to include in the offer letters..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-0">
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Abort Config</button>
+                        <button type="button" class="btn btn-success btn-sm px-3 fw-bold shadow-sm" @click="sendBulkOffers" :disabled="!bulkOfferData.expiry_date || !bulkOfferData.joining_date || bulkOfferLoading">
+                            <span v-if="bulkOfferLoading" class="spinner-border spinner-border-sm me-1" role="status"></span>
+                            {{ bulkOfferLoading ? 'Executing Task...' : 'Generate & Dispatch Bulk Offers' }}
                         </button>
                     </div>
                 </div>
@@ -688,7 +701,7 @@ const GettedApplications = {
         </div>
     </div>
     `,
-    components: { StudentProfile },
+    components: { StudentProfile, RejectionModal },
     data() {
         return {
             stats: {},
@@ -712,6 +725,8 @@ const GettedApplications = {
             rejectionData: { reason: '', note: '' },
             offerData: { expiry_date: '', joining_date: '', message: '' },
             offerGenerationLoading: false,
+            bulkOfferData: { expiry_date: '', joining_date: '', message: '' },
+            bulkOfferLoading: false,
             showSchedule: false,
             selectedApplicationForOffer: null,
             extendOfferModal: null,
@@ -732,6 +747,7 @@ const GettedApplications = {
             applicationDetailModal: null,
             rejectionReasonModal: null,
             sendOfferModal: null,
+            bulkOfferModal: null,
             restoreAuditOverrideModal: null, 
             searchTimeout: null,
             shortlistedFilter: 'all', 
@@ -740,6 +756,10 @@ const GettedApplications = {
         }
     },
     computed: {
+        unsentSelectedCandidates() {
+            if (!this.groupedApplications || !this.groupedApplications.selectedCandidates) return [];
+            return this.groupedApplications.selectedCandidates.filter(app => !app.offer_sent && app.status !== 'Suspended');
+        },
         hasActiveFilters() {
             return this.selectedDriveId || this.selectedType || this.minCGPA || this.filterAvailability !== 'all' || this.filterSkills.length > 0;
         },
@@ -784,9 +804,17 @@ const GettedApplications = {
                 });
             }
             if (this.sortby === 'cgpa') {
-                applications.sort((a, b) => (b.student?.cgpa || 0) - (a.student?.cgpa || 0));
+                applications.sort((a, b) => {
+                    const cgpaA = a.student && a.student.cgpa ? parseFloat(a.student.cgpa) : 0;
+                    const cgpaB = b.student && b.student.cgpa ? parseFloat(b.student.cgpa) : 0;
+                    return cgpaB - cgpaA;
+                });
             } else if (this.sortby === 'apply_datetime') {
-                applications.sort((a, b) => new Date(a.application_date) - new Date(b.application_date));
+                applications.sort((a, b) => {
+                    const dateA = a.application_date ? new Date(a.application_date).getTime() : 0;
+                    const dateB = b.application_date ? new Date(b.application_date).getTime() : 0;
+                    return dateA - dateB;
+                });
             }
 
             return applications;
@@ -815,7 +843,6 @@ const GettedApplications = {
                         groups.pendingApplications.push(app);
                         break;
                     case 'Shortlisted':
-                    case 'Interview': 
                     case 'Interviewing':
                         if (app.interview_datetime === 'N/A' || app.interview_datetime === 'Not Scheduled' || !app.interview_datetime) {
                             groups.awaitingSchedule.push(app);
@@ -839,10 +866,31 @@ const GettedApplications = {
             return groups;
         },
         filteredShortlisted() {
-            const allShortlisted = [
+            let allShortlisted = [
                 ...this.groupedApplications.awaitingSchedule, 
                 ...this.groupedApplications.interviewing
-            ].sort((a, b) => new Date(b.application_date) - new Date(a.application_date));
+            ];
+            
+            if (this.sortby === 'cgpa') {
+                allShortlisted.sort((a, b) => {
+                    const cgpaA = a.student && a.student.cgpa ? parseFloat(a.student.cgpa) : 0;
+                    const cgpaB = b.student && b.student.cgpa ? parseFloat(b.student.cgpa) : 0;
+                    return cgpaB - cgpaA;
+                });
+            } else if (this.sortby === 'apply_datetime') {
+                allShortlisted.sort((a, b) => {
+                    const dateA = a.application_date ? new Date(a.application_date).getTime() : 0;
+                    const dateB = b.application_date ? new Date(b.application_date).getTime() : 0;
+                    return dateA - dateB;
+                });
+            } else {
+                // Default: Sort by date descending
+                allShortlisted.sort((a, b) => {
+                    const dateA = a.application_date ? new Date(a.application_date).getTime() : 0;
+                    const dateB = b.application_date ? new Date(b.application_date).getTime() : 0;
+                    return dateB - dateA;
+                });
+            }
     
             if (this.shortlistedFilter === 'awaiting') {
                 return this.groupedApplications.awaitingSchedule;
@@ -927,7 +975,7 @@ const GettedApplications = {
         getStatCountValue(val) {
             if (val === 'total_applications') return this.allApplications.length;
             if (val === 'pending_applications') return this.allApplications.filter(a => a.status === 'Applied' || a.status === 'Pending').length;
-            if (val === 'scheduled_interviews') return this.allApplications.filter(a => (a.status === 'Shortlisted' || a.status === 'Interview' || a.status === 'Interviewing') && a.interview_datetime !== 'N/A' && a.interview_datetime !== 'Not Scheduled' && a.interview_datetime).length;
+            if (val === 'scheduled_interviews') return this.allApplications.filter(a => (a.status === 'Shortlisted' || a.status === 'Interviewing') && a.interview_datetime !== 'N/A' && a.interview_datetime !== 'Not Scheduled' && a.interview_datetime).length;
             if (val === 'rejected') return this.allApplications.filter(a => a.status === 'Rejected').length;
             return this.stats[val] || 0;
         },
@@ -1074,25 +1122,18 @@ const GettedApplications = {
         },
         openRejectionModalDirect(app) {
             this.selectedApplicationForUpdate = app;
-            this.rejectionCategory = '';
-            this.rejectionData = { reason: '', note: '' };
-            this.rejectionReasonModal.show();
+            this.$refs.rejectionModal.show();
         },
         openRejectionModalFromDetails() {
             if (!this.selectedApplication) return;
             this.selectedApplicationForUpdate = this.selectedApplication;
-            this.rejectionCategory = '';
-            this.rejectionData = { reason: '', note: '' };
             this.applicationDetailModal.hide();
-            this.rejectionReasonModal.show();
+            this.$refs.rejectionModal.show();
         },
-        async confirmRejectApplication() {
+        async confirmRejectApplication(payload) {
             if (!this.selectedApplicationForUpdate) {
                 return;
             }
-            const finalReason = this.rejectionCategory === 'Other' || !this.rejectionCategory
-                ? this.rejectionData.reason
-                : this.rejectionCategory;
 
             const res = await fetch(`/api/view_application/${this.selectedApplicationForUpdate.id}`, {
                 method: 'PUT',
@@ -1102,13 +1143,13 @@ const GettedApplications = {
                 },
                 body: JSON.stringify({
                     status: 'Rejected',
-                    rejection_reason: finalReason || 'No reason provided.',
-                    note_for_student: this.rejectionData.note
+                    rejection_reason: payload.rejection_reason,
+                    note_for_student: payload.note_for_student
                 })
             });
 
             if (res.ok) {
-                this.rejectionReasonModal.hide();
+                this.$refs.rejectionModal.hide();
                 this.fetchApplications(); 
             }
         },
@@ -1191,6 +1232,70 @@ const GettedApplications = {
                         clearInterval(poll); this.offerGenerationLoading = false;
                     }
                 } catch (error) { clearInterval(poll); this.offerGenerationLoading = false; }
+            }, 3000); 
+        },
+        openBulkSendOfferModal() {
+            this.bulkOfferData = { expiry_date: '', joining_date: '', message: '' };
+            this.bulkOfferModal.show();
+        },
+        async sendBulkOffers() {
+            if (!this.bulkOfferData.joining_date || !this.bulkOfferData.expiry_date) return;
+            if (new Date(this.bulkOfferData.expiry_date) <= new Date()) {
+                alert('Offer expiry date must be set to a future date.');
+                return;
+            }
+            if (new Date(this.bulkOfferData.joining_date) <= new Date()) {
+                alert('Joining date must be set to a future date.');
+                return;
+            }
+            if (this.unsentSelectedCandidates.length === 0) {
+                alert('No selected candidates found to send offers to.');
+                return;
+            }
+            
+            this.bulkOfferLoading = true;
+            try {
+                const appIds = this.unsentSelectedCandidates.map(app => app.id);
+                const res = await fetch(`/api/applications/bulk_send_offers`, {
+                    method: 'POST',
+                    headers: { 
+                        'Authentication-Token': localStorage.getItem('token'),
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        application_ids: appIds,
+                        offer_expiry_date: this.bulkOfferData.expiry_date,
+                        joining_date: this.bulkOfferData.joining_date,
+                        message: this.bulkOfferData.message
+                    })
+                });
+                if (res.status === 202) {
+                    const data = await res.json();
+                    this.bulkOfferModal.hide();
+                    this.pollBulkTaskStatus(data.task_id);
+                } else {
+                    const errorData = await res.json();
+                    alert(errorData.message || 'Error occurred while starting the bulk offer letter generation.');
+                    this.bulkOfferLoading = false;
+                }
+            } catch (e) {
+                this.bulkOfferLoading = false;
+            }
+        },
+        pollBulkTaskStatus(taskId) {
+            const poll = setInterval(async () => {
+                try {
+                    const statusRes = await fetch(`/api/task_status/${taskId}`, {
+                        headers: { 'Authentication-Token': localStorage.getItem('token') }
+                    });
+                    if (!statusRes.ok) { clearInterval(poll); this.bulkOfferLoading = false; return; }
+                    const statusData = await statusRes.json();
+                    if (statusData.state === 'SUCCESS') {
+                        clearInterval(poll); this.bulkOfferLoading = false; alert('Bulk offers generated and dispatched successfully!'); this.fetchApplications();
+                    } else if (statusData.state === 'FAILURE') {
+                        clearInterval(poll); this.bulkOfferLoading = false; alert('Error generating bulk offers.');
+                    }
+                } catch (error) { clearInterval(poll); this.bulkOfferLoading = false; }
             }, 3000); 
         },
         runStrictSelectAuditGuard(app) {
@@ -1317,8 +1422,8 @@ const GettedApplications = {
         this.fetchApplications();
 
         this.applicationDetailModal = new bootstrap.Modal(document.getElementById('applicationDetailModal'));
-        this.rejectionReasonModal = new bootstrap.Modal(document.getElementById('rejectionReasonModal'));
         this.sendOfferModal = new bootstrap.Modal(document.getElementById('sendOfferModal'));
+        this.bulkOfferModal = new bootstrap.Modal(document.getElementById('bulkOfferModal'));
         this.restoreAuditOverrideModal = new bootstrap.Modal(document.getElementById('restoreAuditOverrideModal'));
         this.extendOfferModal = new bootstrap.Modal(document.getElementById('extendOfferModal'));
         this.availabilityModal = new bootstrap.Modal(document.getElementById('availabilityDetailsModal'));
@@ -1336,6 +1441,10 @@ const GettedApplications = {
         document.getElementById('extendOfferModal').addEventListener('hidden.bs.modal', () => {
             this.selectedApplicationForOffer = null;
             this.extendOfferData = { new_expiry_date: '' };
+        });
+
+        document.getElementById('bulkOfferModal').addEventListener('hidden.bs.modal', () => {
+            this.bulkOfferData = { expiry_date: '', joining_date: '', message: '' };
         });
     }
 }

@@ -24,7 +24,7 @@ const StudentProfile = {
             <li v-if="userRole === 'admin' || userRole === 'stud'" class="nav-item">
                 <button class="nav-link" :class="{ active: currentTab === 'placements' }" @click="currentTab = 'placements'">Placements (Hired)</button>
             </li>
-            <li v-if="userRole === 'admin'" class="nav-item">
+            <li v-if="userRole === 'admin' || userRole === 'stud'" class="nav-item">
                 <button class="nav-link" :class="{ active: currentTab === 'history' }" @click="currentTab = 'history'">Status Logs (Suspension History)</button>
             </li>
         </ul>
@@ -237,7 +237,7 @@ const StudentProfile = {
         </div>
 
         <!-- Status History (Audit logs for Admins) -->
-        <div v-if="currentTab === 'history' && userRole === 'admin'">
+        <div v-if="currentTab === 'history' && (userRole === 'admin' || userRole === 'stud')">
             <div class="card shadow-sm border-0 rounded-4 overflow-hidden">
                 <div class="card-header bg-dark text-white fw-bold py-3">
                     <i class="bi bi-shield-lock-fill me-2"></i>Account Status Audit History

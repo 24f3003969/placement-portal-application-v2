@@ -23,6 +23,7 @@ import ViewDrive from "../components/view_drive.js";
 import AboutUs from "../pages/AboutUs.js";
 import ContactSupport from "../pages/ContactSupport.js";
 import PrivacyPolicy from "../pages/PrivacyPolicy.js";
+import ResetPassword from "../pages/ResetPassword.js";
 
 
 
@@ -33,6 +34,7 @@ const routes= [
     {path: '/privacy_policy', component: PrivacyPolicy},
     {path: '/login', component: Login},
     {path: '/signup', component: SignUp},
+    {path: '/reset_password', component: ResetPassword},
     {path: '/employer_details', component: EmployerDetails, meta: {requiresAuth: true, role: 'comp'}},
     {path: '/student_dashboard', component: StudentDashboard, meta: {requiresAuth: true, requiresProfile: true, role:'stud'}},
     {path:'/drive_detail_view', component:DriveDetailView, meta: {requiresAuth: true, role: 'stud' || 'comp' || 'admin'}},
@@ -73,7 +75,7 @@ router.beforeEach((to, from, next) => {
     }
     // -----------------------------------------------------------------------
 
-    const publicPages = ['/', '/login', '/signup', '/about_us', '/contact_support', '/privacy_policy'];
+    const publicPages = ['/', '/login', '/signup', '/about_us', '/contact_support', '/privacy_policy', '/reset_password'];
     if (publicPages.includes(to.path)) {
         return next();
     }
