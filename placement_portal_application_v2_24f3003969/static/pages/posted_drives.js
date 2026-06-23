@@ -127,6 +127,7 @@ const PostedDrives={
             :drive="currentForm"
             @back="view='drives' ; this.fetchDrives ; this.fetchTopDrives"
             :user-role="userRole"
+            @close-drive="closeDrive"
         />
         <drive-detail-view
             v-if="view==='drive_details'"

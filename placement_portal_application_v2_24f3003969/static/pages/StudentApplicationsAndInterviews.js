@@ -162,6 +162,7 @@ const StudentApplicationsAndInterviews = {
                                         <span v-else class="text-muted small">N/A</span>
                                     </td>
                                     <td class="text-end pe-4">
+                                        <button v-if="allInterviews.some(i => parseInt(i.application_id) === parseInt(app.id))" @click="viewInterviewDetails(app.id)" class="btn btn-sm btn-outline-primary me-2">View Interview</button>
                                         <button class="btn btn-sm btn-outline-secondary" @click="showRemark(app.rejection_reason || app.offer_message || 'No remarks logged.')">
                                             Remarks
                                         </button>
@@ -568,7 +569,7 @@ const StudentApplicationsAndInterviews = {
             const now = new Date();
             return this.allInterviews.filter(interview => {
                 const interviewDateTime = new Date(interview.datetime);
-                return interview.status === 'completed' || (interview.status === 'scheduled' && interviewDateTime < now);
+                return interview.status === 'completed' || interview.status === 'canceled' || (interview.status === 'scheduled' && interviewDateTime < now);
             }).sort((a, b) => new Date(b.datetime) - new Date(a.datetime));
         },
         interviewInsights() {

@@ -37,7 +37,10 @@ const ViewDrive = {
                         </span>
                     </span>
                     
-                    <button v-if="userRole === 'comp'" @click="screenApplications(); fetchInsights()" class="btn btn-primary"><i class="bi bi-person-check-fill me-2"></i>Screen Applications</button>
+                    <span v-if="userRole === 'comp'" class="d-inline-block">
+                        <button @click="screenApplications(); fetchInsights()" class="btn btn-primary me-2"><i class="bi bi-person-check-fill me-2"></i>Screen Applications</button>
+                        <button v-if="['Active', 'Application Closed'].includes(drive.Status)" @click="$emit('close-drive', drive.DriveID)" class="btn btn-danger"><i class="bi bi-x-circle-fill me-1"></i>Close Drive</button>
+                    </span>
                 </div>
             </div>
 

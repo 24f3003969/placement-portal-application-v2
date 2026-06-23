@@ -524,7 +524,7 @@ const AdminManageDrives = {
             if (drive && typeof drive === 'object') {
                 const remark = drive.Remark;
                 if (remark) {
-                    const label = drive.Status === 'Suspended' ? 'Suspension Reason' : 'Rejection Remark';
+                    const label = drive.Status === 'Suspended' ? 'Suspension Reason' : drive.Status === 'Rejected' ? 'Rejection Reason' : drive.Status==='Closed' ? 'Drive Closed' : drive.Status==='Application Closed' ? 'Applications Closed' : 'Remark';
                     alert(label + ': ' + remark);
                 } else {
                     alert('No remark/reason was provided.');
@@ -532,9 +532,9 @@ const AdminManageDrives = {
             } else {
                 const remark = drive;
                 if (remark) {
-                    alert('Rejection Remark: ' + remark);
+                    alert('Remark: ' + remark);
                 } else {
-                    alert('No rejection remark was provided.');
+                    alert('No remark was provided.');
                 }
             }
         },

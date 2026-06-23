@@ -74,10 +74,6 @@ const StudentResource = {
                         <button @click="$emit('view', drive)" class="btn btn-outline-primary btn-sm">View</button>
                         <span v-if="drive.Status === 'Active'">
                             <button @click="$emit('close-applications', drive.DriveID)" class="btn btn-outline-warning btn-sm ms-2">Close Applications</button>
-                            <button @click="$emit('close-drive', drive.DriveID)" class="btn btn-outline-danger btn-sm ms-2">Close Drive</button>
-                        </span>
-                        <span v-else-if="drive.Status === 'Application Closed'">
-                            <button @click="$emit('close-drive', drive.DriveID)" class="btn btn-outline-danger btn-sm ms-2">Close Drive</button>
                         </span>
                     </div>
 
