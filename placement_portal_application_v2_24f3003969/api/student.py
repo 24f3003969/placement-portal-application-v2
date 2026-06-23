@@ -90,7 +90,7 @@ student_app_fields = {
     'available_immediately': fields.Boolean,
     'available_from': fields.String(attribute=lambda x: x.available_from.isoformat() if x.available_from else None),
     'availability_remarks': fields.String,
-    'rejection_reason': fields.String(attribute=lambda x: (x.Remark if x.Remark else (x.internal_rejection_remark if x.internal_rejection_remark and any(sys_term in x.internal_rejection_remark for sys_term in ['Automatically', 'Offer rejected', 'Eligibility lost']) else None)) if x.status == 'Rejected' else None),
+    'rejection_reason': fields.String(attribute=lambda x: x.Remark if x.status in ['Rejected', 'Cancelled'] else None),
     'drive': fields.Nested({
         'DriveID': fields.Integer,
         'JobTitle': fields.String,
@@ -638,7 +638,8 @@ class StudentOfferAcceptAPI(Resource):
 
             for app in other_applications:
                 app.status = 'Cancelled'
-                app.rejection_reason = 'Automatically cancelled as student accepted another job offer.'
+                app.internal_rejection_remark = 'Automatically cancelled as student accepted another job offer.'
+                app.Remark = 'Automatically cancelled as student accepted another job offer.'
                 app.updated_time = get_ist_now()
                 if app.placement:
                     app.placement.offer_status = 'Cancelled'
@@ -682,7 +683,8 @@ class StudentOfferRejectAPI(Resource):
         if application.status != 'Rejected':
             application.previous_status = application.status
         application.status = 'Rejected'
-        application.rejection_reason = 'Offer rejected by student.'
+        application.internal_rejection_remark = 'Offer rejected by student.'
+        application.Remark = 'Offer rejected by student.'
         application.updated_time = get_ist_now()
         if application.placement:
             application.placement.offer_status = 'Rejected'

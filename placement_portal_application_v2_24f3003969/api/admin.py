@@ -1067,6 +1067,19 @@ class AdminManageDrivesAPI(Resource):
             status = 'Closed'
             
         remarks = args.get('remarks')
+        if current_user.has_role('admin'):
+            if remarks and not remarks.startswith("By Admin:"):
+                remarks = f"By Admin: {remarks}"
+            elif not remarks or not remarks.strip():
+                if status == 'Closed':
+                    remarks = "By Admin: Drive closed by admin"
+                elif status == 'Application Closed':
+                    remarks = "By Admin: Applications closed by admin"
+                elif status == 'Suspended':
+                    remarks = "By Admin: Suspended by admin"
+                elif status == 'Rejected':
+                    remarks = "By Admin: Rejected by admin"
+
         previous_status = drive.Status
         drive.Status = status
             
@@ -1186,6 +1199,7 @@ class AdminManageDrivesAPI(Resource):
                         app.previous_status = app.status
                     app.status = 'Rejected'
                     app.internal_rejection_remark = remarks or 'Drive closed by admin'
+                    app.Remark = 'Drive closed'
                     
                     create_notification(
                         app.student.user_id,
@@ -1204,6 +1218,7 @@ class AdminManageDrivesAPI(Resource):
                 for interview in interviews:
                     interview.status = 'canceled'
                     interview.remarks = remarks or 'Drive closed by admin'
+                    interview.student_facing_remarks = 'Drive closed'
                     create_notification(
                         interview.application.student.user_id,
                         f"Your interview for '{drive.JobTitle}' has been canceled because the drive has closed.",

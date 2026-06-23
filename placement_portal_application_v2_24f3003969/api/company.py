@@ -346,6 +346,7 @@ class DriveApplication(Resource):
                             app.previous_status = app.status
                     app.status = 'Rejected'
                     app.internal_rejection_remark = 'Drive closed by recruiter'
+                    app.Remark = 'Drive closed'
                     
                     # Create dynamic in-app notification
                     create_notification(
@@ -366,6 +367,7 @@ class DriveApplication(Resource):
                     for interview in upcoming_interviews:
                         interview.status = 'canceled'
                         interview.remarks = 'Drive closed by recruiter'
+                        interview.student_facing_remarks = 'Drive closed'
                         create_notification(
                             interview.application.student.user_id,
                             f"Your interview for '{drive.JobTitle}' has been canceled because the drive has closed.",
@@ -792,7 +794,8 @@ class CompanyApplicationsAPI(Resource):
             application.previous_status = old_status
         application.status = new_status
         if new_status == 'Rejected':
-            application.rejection_reason = args.get('rejection_reason') or 'No reason provided.'
+            application.internal_rejection_remark = args.get('rejection_reason') or 'No reason provided.'
+            application.Remark = args.get('rejection_reason') or 'No reason provided.'
             
             # Cancel scheduled/suspended interviews on rejection
             upcoming_interviews = Interview.query.filter(
@@ -1844,6 +1847,7 @@ class RejectIneligibleApplicationsAPI(Resource):
                     app.previous_status = app.status
                 app.status = 'Rejected'
                 app.internal_rejection_remark = f"Eligibility lost due to profile update (Mismatch: {', '.join(issues)})"
+                app.Remark = f"Eligibility lost due to profile update (Mismatch: {', '.join(issues)})"
                 app.updated_time = get_ist_now()
                 
                 create_notification(
